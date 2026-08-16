@@ -12,21 +12,21 @@
 
 ## 📦 Kiến trúc hệ thống
 
-Dự án này nằm trong một kiến trúc microservices nhỏ gọn, bao gồm:
-1. **Frontend (Nginx + React)**
-2. **Backend (Node.js + Express)** - Repository này
-3. **Database (PostgreSQL)**
+Dự án này tuân theo kiến trúc Microservices hiện đại, phân tách hoàn toàn giữa Frontend và Backend:
+1. **Frontend (Next.js)**: Được khuyên dùng triển khai độc lập lên các nền tảng như **Vercel** để tận dụng CDN toàn cầu.
+2. **Backend API (Node.js + Express)**: Repository này, được đóng gói sẵn Docker để triển khai dễ dàng lên VPS.
+3. **Database (PostgreSQL)**: Được chạy chung với Backend API thông qua Docker Compose.
 
 ## 🛠️ Hướng dẫn cài đặt
 
 ### Cách 1: Chạy bằng Docker (Khuyên dùng)
 Đây là cách nhanh nhất và chuẩn mực nhất, không cần cài đặt Node.js hay DB ở máy cục bộ. Yêu cầu máy bạn phải cài sẵn [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
-Bạn cần chạy lệnh này ở thư mục gốc chứa cả frontend và backend (nơi chứa file `docker-compose.yml`):
+Bạn chỉ cần đứng tại thư mục gốc của repository này (nơi chứa file `docker-compose.yml`) và chạy lệnh:
 ```bash
 docker-compose up -d --build
 ```
-Lệnh trên sẽ tự động bật PostgreSQL, tạo bảng, bơm dữ liệu (seed) và khởi động API server tại port `5000`.
+Lệnh trên sẽ tự động bật PostgreSQL, tạo bảng, bơm dữ liệu mẫu (seed) và khởi động API server tại port `5000`.
 
 ### Cách 2: Chạy trực tiếp (Local Development)
 Yêu cầu: Node.js (>= 20) và một máy chủ PostgreSQL đang chạy.

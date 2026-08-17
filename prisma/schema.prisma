@@ -113,6 +113,7 @@ model PromoCode {
   usageLimit    Int?     // null means unlimited
   usedCount     Int      @default(0)
   isActive      Boolean  @default(true)
+  expiresAt     DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -125,4 +126,94 @@ model PasswordResetToken {
   expiresAt  DateTime
   used       Boolean  @default(false)
   createdAt  DateTime @default(now())
+}
+
+model Category {
+  id           Int      @id @default(autoincrement())
+  slug         String   @unique
+  name         String
+  parent       String?
+  description  String?
+  productCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Service {
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
+  name        String
+  category    String
+  price       Int
+  duration    Int
+  description String?
+  process     String[]
+  image       String?
+  featured    Boolean  @default(false)
+  order       Int      @default(0)
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Course {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  excerpt     String?
+  description String?
+  price       Int
+  duration    String?
+  startDate   String?
+  image       String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  leads       Lead[]
+}
+
+model Lead {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String
+  email     String?
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  status    String   @default("new")
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Story {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  excerpt     String?
+  content     String?
+  image       String?
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Lookbook {
+  id           String   @id @default(uuid())
+  image        String
+  title        String?
+  category     String?
+  tags         String[]
+  instagramUrl String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Media {
+  id        String   @id @default(uuid())
+  url       String
+  filename  String
+  type      String
+  size      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

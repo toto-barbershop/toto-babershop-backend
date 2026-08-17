@@ -2,12 +2,19 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import productRoutes from './routes/productRoutes.js';
+import categoryRoutes from './routes/categoryRoutes.js';
+import serviceRoutes from './routes/serviceRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import statsRoutes from './routes/statsRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import promoRoutes from './routes/promoRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import courseRoutes from './routes/courseRoutes.js';
+import leadRoutes from './routes/leadRoutes.js';
+import storyRoutes from './routes/storyRoutes.js';
+import lookbookRoutes from './routes/lookbookRoutes.js';
+import mediaRoutes from './routes/mediaRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -42,12 +49,19 @@ app.get('/', (req, res) => {
 
 // API Routes
 app.use('/api/products', productRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/services', serviceRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/promo', promoRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/courses', courseRoutes);
+app.use('/api/leads', leadRoutes);
+app.use('/api/stories', storyRoutes);
+app.use('/api/lookbooks', lookbookRoutes);
+app.use('/api/media', mediaRoutes);
 
 export { app };
 

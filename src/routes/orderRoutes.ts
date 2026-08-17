@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getOrders, createOrder, paymentWebhook, payosWebhook, updateOrderStatus, cancelOrder, getOrderStatus } from '../controllers/orderController.js';
 import rateLimit from 'express-rate-limit';
-import { authenticateToken } from '../middlewares/authMiddleware.js';
+import { authenticateToken, optionalAuth } from '../middlewares/authMiddleware.js';
 
 const router = Router();
 
@@ -14,7 +14,7 @@ const checkoutLimiter = rateLimit({
 });
 
 router.get('/', getOrders);
-router.post('/checkout', authenticateToken, checkoutLimiter, createOrder);
+router.post('/checkout', optionalAuth, checkoutLimiter, createOrder);
 router.post('/webhook/payment', paymentWebhook);     // webhook cũ (COD/legacy)
 router.post('/webhook/payos', payosWebhook);          // webhook payOS
 router.get('/:id/status', getOrderStatus);

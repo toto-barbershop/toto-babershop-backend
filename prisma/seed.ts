@@ -545,6 +545,26 @@ async function main() {
     await prisma.media.upsert({ where: { id: m.id }, update: m, create: m });
   }
 
+  console.log('🌱 Seeding FAQs...');
+  const faqs = [
+    { question: 'Thời gian giao hàng là bao lâu?', answer: 'Thông thường nội thành TPHCM 1-2 ngày, ngoại thành 3-5 ngày.', category: 'shop', order: 1 },
+    { question: 'Có được kiểm tra hàng trước khi nhận không?', answer: 'Có, bạn được quyền kiểm tra hàng trước khi thanh toán.', category: 'shop', order: 2 },
+    { question: 'Có cần đặt lịch trước khi cắt không?', answer: 'Nên đặt lịch trước để tránh phải đợi lâu, đặc biệt là cuối tuần.', category: 'service', order: 1 },
+  ];
+  for (const f of faqs) {
+    await prisma.faq.create({ data: f });
+  }
+
+  console.log('🌱 Seeding Settings...');
+  const settingsData = {
+    business: { name: 'TOTO BARBERSHOP' },
+    contact: { email: 'hello@totobarbershop.com', phone: '0901234567', address: '123 Đường ABC, Quận 1, TPHCM' },
+    socials: { facebook: 'https://facebook.com/totobarbershop', instagram: 'https://instagram.com/totobarbershop', tiktok: 'https://tiktok.com/@totobarbershop' }
+  };
+  for (const [key, value] of Object.entries(settingsData)) {
+    await prisma.setting.upsert({ where: { key }, update: { value: value as any }, create: { key, value: value as any } });
+  }
+
   console.log('\n🎉 Seed hoàn tất!');
 }
 

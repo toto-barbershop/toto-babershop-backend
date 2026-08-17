@@ -62,29 +62,34 @@ export const createProduct = async (req: Request, res: Response) => {
     const finalBasePrice = typeof basePrice !== 'undefined' ? basePrice : (typeof price === 'number' ? price : parseInt(price) || 0);
     const finalImages = images && images.length > 0 ? images : (image ? [image] : []);
 
+    const productData: any = { 
+      name: finalName || 'Unnamed Product', 
+      slug: finalSlug,
+      description, 
+      basePrice: finalBasePrice, 
+      images: finalImages, 
+      category: category || 'General',
+      collection: collection || type,
+      status: status || 'active',
+      featured: featured || false,
+    };
+
+    if (variants && variants.length > 0) {
+      productData.variants = {
+        create: variants.map((v: any) => ({
+          name: v.name,
+          size: v.options?.size || v.size,
+          color: v.options?.color || v.color,
+          options: v.options,
+          price: v.price ?? finalBasePrice,
+          stock: v.stock ?? 0,
+          sku: v.sku
+        }))
+      };
+    }
+
     const product = await prisma.product.create({
-      data: { 
-        name: finalName || 'Unnamed Product', 
-        slug: finalSlug,
-        description, 
-        basePrice: finalBasePrice, 
-        images: finalImages, 
-        category: category || 'General',
-        collection: collection || type,
-        status: status || 'active',
-        featured: featured || false,
-        variants: variants && variants.length > 0 ? {
-          create: variants.map((v: any) => ({
-            name: v.name,
-            size: v.options?.size || v.size,
-            color: v.options?.color || v.color,
-            options: v.options,
-            price: v.price ?? finalBasePrice,
-            stock: v.stock ?? 0,
-            sku: v.sku
-          }))
-        } : undefined
-      },
+      data: productData,
       include: { variants: true }
     });
     await redis.del('cache:products');

@@ -217,3 +217,31 @@ model Media {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model Faq {
+  id        Int      @id @default(autoincrement())
+  question  String
+  answer    String
+  category  String   @default("shop")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Setting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  message   String
+  status    String   @default("unread") // "unread", "read", "replied"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

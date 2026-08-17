@@ -551,6 +551,7 @@ async function main() {
     { question: 'Có được kiểm tra hàng trước khi nhận không?', answer: 'Có, bạn được quyền kiểm tra hàng trước khi thanh toán.', category: 'shop', order: 2 },
     { question: 'Có cần đặt lịch trước khi cắt không?', answer: 'Nên đặt lịch trước để tránh phải đợi lâu, đặc biệt là cuối tuần.', category: 'service', order: 1 },
   ];
+  await prisma.faq.deleteMany({});
   for (const f of faqs) {
     await prisma.faq.create({ data: f });
   }

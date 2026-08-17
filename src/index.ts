@@ -10,6 +10,11 @@ import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import promoRoutes from './routes/promoRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import courseRoutes from './routes/courseRoutes.js';
+import leadRoutes from './routes/leadRoutes.js';
+import storyRoutes from './routes/storyRoutes.js';
+import lookbookRoutes from './routes/lookbookRoutes.js';
+import mediaRoutes from './routes/mediaRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -52,6 +57,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/promo', promoRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/courses', courseRoutes);
+app.use('/api/leads', leadRoutes);
+app.use('/api/stories', storyRoutes);
+app.use('/api/lookbooks', lookbookRoutes);
+app.use('/api/media', mediaRoutes);
 
 export { app };
 

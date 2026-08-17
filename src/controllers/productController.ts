@@ -1,8 +1,14 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../config/db.js';
+import redis from '../config/redis.js';
 
 export const getProducts = async (req: Request, res: Response) => {
   try {
+    const cachedProducts = await redis.get('cache:products');
+    if (cachedProducts) {
+      return res.json(JSON.parse(cachedProducts));
+    }
+
     const products = await prisma.product.findMany({
       include: { variants: true }
     });
@@ -15,6 +21,8 @@ export const getProducts = async (req: Request, res: Response) => {
         metaDescription: p.seoDescription
       }
     }));
+    
+    await redis.set('cache:products', JSON.stringify(mappedProducts), 'EX', 3600);
     res.json(mappedProducts);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch products' });
@@ -79,6 +87,7 @@ export const createProduct = async (req: Request, res: Response) => {
       },
       include: { variants: true }
     });
+    await redis.del('cache:products');
     res.json(product);
   } catch (error) {
     console.error("Error creating product:", error);
@@ -148,6 +157,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       },
       include: { variants: true }
     });
+    await redis.del('cache:products');
     res.json(product);
   } catch (error) {
     console.error("Error updating product:", error);
@@ -167,6 +177,7 @@ export const deleteProduct = async (req: Request, res: Response) => {
     const product = await prisma.product.delete({
       where: { id: parseInt(id as string) }
     });
+    await redis.del('cache:products');
     res.json({ success: true, product });
   } catch (error) {
     console.error("Error deleting product:", error);

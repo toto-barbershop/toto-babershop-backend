@@ -1,11 +1,19 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../config/db.js';
+import redis from '../config/redis.js';
 
 export const getServices = async (req: Request, res: Response) => {
   try {
+    const cachedServices = await redis.get('cache:services');
+    if (cachedServices) {
+      return res.json(JSON.parse(cachedServices));
+    }
+
     const services = await prisma.service.findMany({
       orderBy: { order: 'asc' }
     });
+    
+    await redis.set('cache:services', JSON.stringify(services), 'EX', 3600);
     res.json(services);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch services' });
@@ -33,6 +41,7 @@ export const createService = async (req: Request, res: Response) => {
         status: status || 'active'
       }
     });
+    await redis.del('cache:services');
     res.json(service);
   } catch (error) {
     console.error("Error creating service:", error);
@@ -61,6 +70,7 @@ export const updateService = async (req: Request, res: Response) => {
         ...(status && { status })
       }
     });
+    await redis.del('cache:services');
     res.json(service);
   } catch (error) {
     console.error("Error updating service:", error);
@@ -75,6 +85,7 @@ export const deleteService = async (req: Request, res: Response) => {
     const service = await prisma.service.delete({
       where: { id: parseInt(id as string) }
     });
+    await redis.del('cache:services');
     res.json({ success: true, service });
   } catch (error) {
     console.error("Error deleting service:", error);

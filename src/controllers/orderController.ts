@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../config/db.js';
 import { createRequire } from 'module';
+import redis from '../config/redis.js';
 
 // @payos/node export dạng { PayOS, PayOSError, ... } — không phải default export
 const require = createRequire(import.meta.url);
@@ -17,19 +18,49 @@ const payos = new PayOS({
 
 export const createOrder = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.id;
-    const { items, total, discount, promoCode, idempotencyKey, paymentMethod, address, note } = req.body;
+    let userId = (req as any).user?.id;
+    const { items, total, discount, promoCode, idempotencyKey, paymentMethod, address, note, customer, email } = req.body;
 
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     if (!items || items.length === 0) return res.status(400).json({ error: 'Giỏ hàng trống' });
     if (!idempotencyKey) return res.status(400).json({ error: 'Thiếu idempotencyKey' });
 
-    // Kiểm tra Idempotency Key (chặn double-submit)
-    const existingOrder = await prisma.order.findUnique({
-      where: { idempotencyKey }
-    });
-    if (existingOrder) {
-      return res.json(existingOrder);
+    // Handle Guest Checkout
+    if (!userId) {
+      const guestEmail = customer?.email || email;
+      const guestName = customer?.name || 'Khách vãng lai';
+      const guestPhone = customer?.phone || '';
+      
+      if (!guestEmail) {
+        return res.status(400).json({ error: 'Thiếu email để đặt hàng' });
+      }
+
+      let guestUser = await prisma.user.findUnique({ where: { email: guestEmail } });
+      
+      if (!guestUser) {
+        const bcrypt = require('bcryptjs');
+        const randomPassword = await bcrypt.hash(Math.random().toString(36), 10);
+        guestUser = await prisma.user.create({
+          data: {
+            email: guestEmail,
+            name: guestName,
+            phone: guestPhone,
+            password: randomPassword,
+            role: 'GUEST'
+          }
+        });
+      }
+      userId = guestUser.id;
+    }
+
+
+    // Kiểm tra Idempotency Key bằng Redis (chặn double-submit tức thì)
+    const redisIdempotencyKey = `idempotency:${idempotencyKey}`;
+    const isFirstProcessing = await redis.set(redisIdempotencyKey, 'PROCESSING', 'NX', 'EX', 86400); // Lưu 24h
+    if (!isFirstProcessing) {
+      // Đã có request đang xử lý hoặc đã hoàn thành, trả về lỗi chung chung hoặc tìm order cũ
+      const existingOrder = await prisma.order.findUnique({ where: { idempotencyKey } });
+      if (existingOrder) return res.json(existingOrder);
+      return res.status(409).json({ error: 'Đơn hàng đang được xử lý, vui lòng đợi giây lát' });
     }
 
     // Transaction với row lock (for update)
@@ -141,6 +172,10 @@ export const createOrder = async (req: Request, res: Response) => {
 
     res.status(201).json(order);
   } catch (error: any) {
+    // Nếu lỗi tạo đơn hàng, xóa cache redis để cho phép thử lại
+    if (req.body.idempotencyKey) {
+      await redis.del(`idempotency:${req.body.idempotencyKey}`);
+    }
     console.error('Create order error:', error);
     if (error.code === 'P2002') {
       return res.status(409).json({ error: 'Đơn hàng đã được tạo trước đó.' });

@@ -260,7 +260,45 @@ const products = [
 ];
 
 async function main() {
-  console.log('🌱 Seeding products...');
+  console.log('🌱 Seeding categories...');
+  const categories = [
+    { slug: 'grooming', name: 'Grooming', parent: 'grooming', description: 'Sản phẩm chăm sóc tóc và râu.', productCount: 6 },
+    { slug: 'merchandise', name: 'Toto Merchandise', parent: 'merchandise', description: 'Đồ streetwear & phụ kiện thương hiệu.', productCount: 6 },
+    { slug: 'pomade', name: 'Pomade & Sáp', parent: 'grooming', description: 'Sản phẩm tạo kiểu.', productCount: 2 },
+    { slug: 'beard', name: 'Chăm sóc râu', parent: 'grooming', description: 'Dầu & dưỡng râu.', productCount: 1 },
+    { slug: 'apparel', name: 'Apparel', parent: 'merchandise', description: 'Áo & khoác.', productCount: 3 },
+    { slug: 'accessory', name: 'Phụ kiện', parent: 'merchandise', description: 'Nón, túi, tất.', productCount: 3 },
+  ];
+
+  for (const c of categories) {
+    await prisma.category.upsert({
+      where: { slug: c.slug },
+      update: c,
+      create: c,
+    });
+    console.log(`  ✅ Category: ${c.name}`);
+  }
+
+  console.log('\n🌱 Seeding services...');
+  const services = [
+    { slug: 'classic-haircut', name: 'Classic Haircut', category: 'Cắt tóc', price: 150000, duration: 45, description: 'Cắt tóc cổ điển theo khuôn mặt, gội và tạo kiểu hoàn thiện.', process: ['Tư vấn kiểu tóc', 'Cắt & tỉa', 'Gội massage', 'Tạo kiểu'], image: '/images/barber-1.png', featured: true, order: 1, status: 'active' },
+    { slug: 'skin-fade', name: 'Skin Fade', category: 'Cắt tóc', price: 200000, duration: 60, description: 'Fade da đầu chuẩn từng lớp, đường nét sắc sảo, hiện đại.', process: ['Tư vấn độ fade', 'Tông đơ tạo lớp', 'Line-up', 'Tạo kiểu'], image: '/images/lookbook-3.png', featured: true, order: 2, status: 'active' },
+    { slug: 'beard-shaping', name: 'Beard Shaping & Hot Towel', category: 'Cạo râu', price: 120000, duration: 30, description: 'Tạo dáng râu, cạo dao cạo truyền thống kèm khăn nóng thư giãn.', process: ['Khăn nóng', 'Tạo dáng râu', 'Cạo dao', 'Dưỡng da'], image: '/images/lookbook-5.png', featured: true, order: 3, status: 'active' },
+    { slug: 'the-full-service', name: 'The Full Service', category: 'Combo', price: 300000, duration: 90, description: 'Combo trọn gói: cắt tóc, fade, cạo râu và tạo kiểu cao cấp.', process: ['Tư vấn tổng thể', 'Cắt & fade', 'Cạo râu hot towel', 'Gội & tạo kiểu'], image: '/images/hero.png', featured: true, order: 4, status: 'active' },
+    { slug: 'kids-cut', name: 'Kids Cut', category: 'Cắt tóc', price: 100000, duration: 30, description: 'Cắt tóc cho bé nhẹ nhàng, thân thiện, tạo kiểu dễ thương.', process: ['Trò chuyện với bé', 'Cắt & tỉa', 'Tạo kiểu'], image: '/images/barber-2.png', featured: false, order: 5, status: 'active' },
+    { slug: 'hair-color', name: 'Hair Color', category: 'Nhuộm', price: 450000, duration: 120, description: 'Nhuộm màu thời trang hoặc phủ bạc, chăm sóc màu bền đẹp.', process: ['Tư vấn màu', 'Tẩy/nhuộm', 'Dưỡng màu', 'Tạo kiểu'], image: '/images/lookbook-4.png', featured: false, order: 6, status: 'active' },
+  ];
+
+  for (const s of services) {
+    await prisma.service.upsert({
+      where: { slug: s.slug },
+      update: s,
+      create: s,
+    });
+    console.log(`  ✅ Service: ${s.name}`);
+  }
+
+  console.log('\n🌱 Seeding products...');
   
   for (const p of products) {
     const product = await prisma.product.upsert({
@@ -367,6 +405,7 @@ async function main() {
       maxDiscount: 50000,
       usageLimit: 100,
       isActive: true,
+      expiresAt: null,
     },
     {
       code: 'TOTO50K',
@@ -376,6 +415,37 @@ async function main() {
       maxDiscount: null,
       usageLimit: 50,
       isActive: true,
+      expiresAt: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000), // Expires in 7 days
+    },
+    {
+      code: 'SUMMER20',
+      discountType: 'PERCENT',
+      discountValue: 20,
+      minOrderValue: 500000,
+      maxDiscount: 100000,
+      usageLimit: 200,
+      isActive: true,
+      expiresAt: new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000), // Expires in 30 days
+    },
+    {
+      code: 'FREESHIP15K',
+      discountType: 'FIXED',
+      discountValue: 15000,
+      minOrderValue: 150000,
+      maxDiscount: null,
+      usageLimit: null,
+      isActive: true,
+      expiresAt: null,
+    },
+    {
+      code: 'VIP100K',
+      discountType: 'FIXED',
+      discountValue: 100000,
+      minOrderValue: 1000000,
+      maxDiscount: null,
+      usageLimit: 10,
+      isActive: true,
+      expiresAt: new Date(new Date().getTime() - 24 * 60 * 60 * 1000), // Expired 1 day ago (for testing)
     }
   ];
 
@@ -386,6 +456,93 @@ async function main() {
       create: pc,
     });
     console.log(`  ✅ Promo: ${pc.code}`);
+  }
+
+  console.log('\n🌱 Seeding courses...');
+  const courses = [
+    {
+      id: 't-foundation',
+      slug: 'barber-foundation',
+      title: 'Barber Foundation',
+      excerpt: 'Khóa nền tảng cho người mới bắt đầu',
+      description: 'Từ cách cầm tông đơ đến hoàn thiện một kiểu cắt cơ bản.',
+      duration: '8 tuần',
+      price: 12000000,
+      image: '/images/training.png',
+      status: 'active',
+    },
+    {
+      id: 't-pro',
+      slug: 'advanced-fade-styling',
+      title: 'Advanced Fade & Styling',
+      excerpt: 'Khóa nâng cao cho barber đã có nghề',
+      description: 'Tập trung vào fade phức tạp, freestyle và xây dựng phong cách cá nhân.',
+      duration: '6 tuần',
+      price: 18000000,
+      image: '/images/lookbook-3.png',
+      status: 'active',
+    }
+  ];
+  for (const c of courses) {
+    await prisma.course.upsert({ where: { slug: c.slug }, update: c, create: c });
+  }
+
+  console.log('🌱 Seeding leads...');
+  const leads = [
+    { id: 'l-1', name: 'Trần Minh', phone: '0901234567', email: 'minh@example.com', courseId: 't-foundation', status: 'new', notes: 'Muốn học khóa nền tảng buổi tối.' },
+    { id: 'l-2', name: 'Lê Quang', phone: '0912345678', email: 'quang@example.com', courseId: 't-pro', status: 'contacted', notes: 'Đã làm barber 2 năm, muốn nâng cao fade.' },
+    { id: 'l-3', name: 'Phạm Hải', phone: '0987654321', email: 'hai@example.com', courseId: 't-foundation', status: 'converted', notes: 'Chuyển nghề, hỏi học phí trả góp.' },
+    { id: 'l-4', name: 'Ngô Tuấn', phone: '0977123456', email: 'tuan@example.com', courseId: 't-foundation', status: 'new', notes: 'Hỏi lịch khai giảng.' },
+  ];
+  for (const l of leads) {
+    await prisma.lead.upsert({ where: { id: l.id }, update: l, create: l });
+  }
+
+  console.log('🌱 Seeding stories...');
+  const stories = [
+    {
+      id: 'st-origin',
+      slug: 'the-origin',
+      title: 'The Origin',
+      excerpt: 'Từ ghế cắt đến tủ đồ',
+      content: 'Toto Merchandise sinh ra từ văn hóa barber — nơi mỗi đường kéo, mỗi lần fade đều là một tuyên ngôn phong cách.',
+      image: '/images/merch-story-hero.jpg',
+      publishedAt: new Date(),
+    },
+    {
+      id: 'st-workwear',
+      slug: 'workwear-chapter',
+      title: 'Workwear Chapter',
+      excerpt: 'Bền bỉ như người thợ',
+      content: 'Lấy cảm hứng từ trang phục lao động, chương Workwear tôn vinh sự bền bỉ, thực dụng và vẻ đẹp mộc mạc của người thợ lành nghề.',
+      image: '/images/merch-jacket.png',
+      publishedAt: new Date(),
+    }
+  ];
+  for (const s of stories) {
+    await prisma.story.upsert({ where: { slug: s.slug }, update: s, create: s });
+  }
+
+  console.log('🌱 Seeding lookbooks...');
+  const lookbooks = [
+    { id: 'lb-1', image: '/images/lookbook-1.png', title: 'Pompadour cổ điển', category: 'Classic', tags: ['Classic'] },
+    { id: 'lb-2', image: '/images/lookbook-2.png', title: 'Textured crop & beard', category: 'Modern', tags: ['Modern'] },
+    { id: 'lb-3', image: '/images/lookbook-3.png', title: 'Skin fade sắc nét', category: 'Fade', tags: ['Fade'] },
+    { id: 'lb-4', image: '/images/lookbook-4.png', title: 'Side part thanh lịch', category: 'Classic', tags: ['Classic'] },
+    { id: 'lb-shop-1', image: '/images/ourshop-1.jpg', title: 'Shop Interior 1', category: 'Shop', tags: ['Shop'] },
+  ];
+  for (const lb of lookbooks) {
+    await prisma.lookbook.upsert({ where: { id: lb.id }, update: lb, create: lb });
+  }
+
+  console.log('🌱 Seeding media...');
+  const media = [
+    { id: "med_01", url: "/images/hero.png", filename: "hero.png", type: "image", size: 1200000 },
+    { id: "med_02", url: "/images/interior.png", filename: "interior.png", type: "image", size: 980000 },
+    { id: "med_03", url: "/images/barber-1.png", filename: "barber-1.png", type: "image", size: 760000 },
+  ];
+  for (const m of media) {
+    await prisma.media.upsert({ where: { id: m.id }, update: m, create: m });
   }
 
   console.log('\n🎉 Seed hoàn tất!');

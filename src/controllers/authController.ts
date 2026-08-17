@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { prisma } from '../config/db.js';
 import { sendPasswordResetEmail } from '../services/emailService.js';
+import redis from '../config/redis.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -33,8 +34,14 @@ export const register = async (req: Request, res: Response) => {
       }
     });
 
+    const currentVersionStr = await redis.get(`tokenVersion:${user.id}`);
+    const tokenVersion = currentVersionStr ? parseInt(currentVersionStr) : 1;
+    if (!currentVersionStr) {
+      await redis.set(`tokenVersion:${user.id}`, tokenVersion);
+    }
+
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, email: user.email, role: user.role, tokenVersion },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -66,8 +73,14 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    const currentVersionStr = await redis.get(`tokenVersion:${user.id}`);
+    const tokenVersion = currentVersionStr ? parseInt(currentVersionStr) : 1;
+    if (!currentVersionStr) {
+      await redis.set(`tokenVersion:${user.id}`, tokenVersion);
+    }
+
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, email: user.email, role: user.role, tokenVersion },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -170,10 +183,25 @@ export const resetPassword = async (req: Request, res: Response) => {
       })
     ]);
 
+    // Thu hồi toàn bộ session cũ bằng cách tăng tokenVersion
+    await redis.incr(`tokenVersion:${user.id}`);
+
     res.json({ message: 'Đổi mật khẩu thành công.' });
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ error: 'Failed to reset password' });
+  }
+};
+
+export const logout = async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    if (user && user.id) {
+      await redis.incr(`tokenVersion:${user.id}`);
+    }
+    res.json({ message: 'Đăng xuất thành công' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to logout' });
   }
 };
 

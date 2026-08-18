@@ -56,4 +56,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shop_test?schema=public
           JWT_SECRET: testsecret
           REDIS_URL: redis://localhost:6379
+          PAYOS_CLIENT_ID: test_client_id
+          PAYOS_API_KEY: test_api_key
+          PAYOS_CHECKSUM_KEY: test_checksum_key
         run: npm run test

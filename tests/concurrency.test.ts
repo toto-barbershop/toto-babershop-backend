@@ -32,16 +32,17 @@ describe('Concurrency Test: Checkout 100 requests for 5 items', () => {
     const product = await prisma.product.create({
       data: {
         name: 'Sáp vuốt tóc Test Concurrency',
-        price: 150000,
+        basePrice: 150000,
         category: 'Wax',
-        type: 'Hair',
         variants: {
           create: [
             {
+              price: 150000,
               stock: initialStock, // Chỉ có 5 sản phẩm
             }
           ]
-        }
+        },
+        slug: 'sap-vuot-toc-test-concurrency'
       },
       include: { variants: true }
     });

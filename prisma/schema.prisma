@@ -74,10 +74,11 @@ model ProductVariant {
 }
 
 model Order {
-  id         Int         @id @default(autoincrement())
-  userId     Int
-  user       User        @relation(fields: [userId], references: [id])
-  total      Int
+  id             Int         @id @default(autoincrement())
+  orderCode      String?     @unique  // Mã đơn có cấu trúc, VD: TTB-260818-8A3F
+  userId         Int
+  user           User        @relation(fields: [userId], references: [id])
+  total          Int
   discount       Int         @default(0)
   promoCode      String?
   status         String      @default("PENDING")
@@ -86,9 +87,15 @@ model Order {
   transactionId  String?
   payosOrderCode BigInt?     @unique
   idempotencyKey String?     @unique
+  // Snapshot thông tin nhận hàng tại thời điểm đặt
+  customerName   String?
+  customerPhone  String?
+  customerEmail  String?
+  shippingAddress String?
+  note           String?
   createdAt      DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  items      OrderItem[]
+  updatedAt      DateTime    @updatedAt
+  items          OrderItem[]
 }
 
 model OrderItem {

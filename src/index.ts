@@ -19,11 +19,15 @@ import settingRoutes from './routes/settingRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { globalLimiter } from './middlewares/rateLimitMiddleware.js';
 
 const app = express();
 
 // Security HTTP Headers
 app.use(helmet());
+
+// Apply global rate limiting to all requests
+app.use(globalLimiter);
 
 // CORS configuration
 const allowedOrigins = process.env.FRONTEND_URL 

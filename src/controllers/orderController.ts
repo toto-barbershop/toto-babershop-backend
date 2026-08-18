@@ -1,8 +1,10 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../config/db.js';
+import { Prisma } from '@prisma/client';
 import { createRequire } from 'module';
 import redis from '../config/redis.js';
 import { isValidEmail, isValidPhone } from '../utils/validation.js';
+import { sendOrderEmails } from '../services/emailService.js';
 
 // @payos/node export dạng { PayOS, PayOSError, ... } — không phải default export
 const require = createRequire(import.meta.url);
@@ -15,6 +17,15 @@ const payos = new PayOS({
   checksumKey: process.env.PAYOS_CHECKSUM_KEY!
 });
 
+// Sinh mã đơn hàng quy chuẩn: TTB-YYMMDD-XXXX (VD: TTB-260818-8A3F)
+const generateOrderCode = (): string => {
+  const now = new Date();
+  const datePart = now.getFullYear().toString().slice(-2)
+    + String(now.getMonth() + 1).padStart(2, '0')
+    + String(now.getDate()).padStart(2, '0');
+  const randPart = Math.random().toString(36).toUpperCase().slice(2, 6);
+  return `TTB-${datePart}-${randPart}`;
+};
 
 
 export const createOrder = async (req: Request, res: Response) => {
@@ -78,31 +89,36 @@ export const createOrder = async (req: Request, res: Response) => {
       // Đã có request đang xử lý hoặc đã hoàn thành, trả về lỗi chung chung hoặc tìm order cũ
       const existingOrder = await prisma.order.findUnique({ where: { idempotencyKey } });
       if (existingOrder) return res.json(existingOrder);
-      return res.status(409).json({ error: 'Đơn hàng đang được xử lý, vui lòng đợi giây lát' });
+      // Thay vì quăng lỗi làm frontend crash, trả về 202 Accepted để frontend tự xử lý redirect nhẹ nhàng
+      return res.status(202).json({ success: true, message: 'Đơn hàng đang được xử lý', idempotencyKey });
     }
 
     // Transaction với row lock (for update)
     const order = await prisma.$transaction(async (tx) => {
-      // Khóa và kiểm tra từng sản phẩm
+      // Giải quyết N+1 Query: Gom toàn bộ variant IDs lại, sort để tránh Deadlock và dùng 1 câu query để Lock row
+      const variantIds = items.map((i: any) => Number(i.variantId)).sort();
+      const variantRows = await tx.$queryRaw<any[]>`
+        SELECT id, stock FROM "ProductVariant"
+        WHERE id IN (${Prisma.join(variantIds)})
+        FOR UPDATE
+      `;
+
+      const stockMap = new Map(variantRows.map((v) => [v.id, v.stock]));
+
       for (const item of items) {
         const variantId = Number(item.variantId);
-        const variantRows = await tx.$queryRaw<any[]>`
-          SELECT stock FROM "ProductVariant"
-          WHERE id = ${variantId}
-          FOR UPDATE
-        `;
+        const currentStock = stockMap.get(variantId);
 
-        if (!variantRows || variantRows.length === 0) {
+        if (currentStock === undefined) {
           throw new Error(`Sản phẩm (Variant ID: ${item.variantId}) không tồn tại.`);
         }
 
-        const currentStock = variantRows[0].stock;
         if (currentStock < item.quantity) {
           throw new Error(`Sản phẩm không đủ số lượng trong kho.`);
         }
 
         await tx.productVariant.update({
-          where: { id: Number(item.variantId) },
+          where: { id: variantId },
           data: { stock: currentStock - item.quantity }
         });
       }
@@ -157,15 +173,25 @@ export const createOrder = async (req: Request, res: Response) => {
         }
       }
 
-      // Tạo đơn hàng
+      // Tạo đơn hàng kèm snapshot thông tin nhận hàng
+      const fullAddress = address
+        ? `${address.street ?? ''}, ${address.ward ?? ''}, ${address.district ?? ''}, ${address.province ?? ''}`
+            .replace(/(, )+/g, ', ').replace(/^, |, $/g, '')
+        : null;
       const newOrder = await tx.order.create({
         data: {
-          userId,
-          total,
-          discount: discount || 0,
-          promoCode,
-          idempotencyKey,
+          orderCode: generateOrderCode(),
+          userId: Number(userId),
+          total: Number(total),
+          discount: Number(discount) || 0,
+          promoCode: promoCode ?? null,
+          idempotencyKey: idempotencyKey ?? null,
           paymentMethod: paymentMethod || 'COD',
+          customerName: customer?.name ?? null,
+          customerPhone: customer?.phone ?? null,
+          customerEmail: customer?.email ?? email ?? null,
+          shippingAddress: fullAddress,
+          note: note ?? null,
           items: {
             create: items.map((i: any) => ({
               productId: i.productId,
@@ -218,7 +244,18 @@ export const createOrder = async (req: Request, res: Response) => {
       }
     }
 
-    res.status(201).json(order);
+    // Fire & Forget: Gửi email bất đồng bộ, không dùng await
+    const emailAddr = order.customerEmail || email;
+    if (emailAddr) {
+      sendOrderEmails(
+        order.id, total, emailAddr,
+        order.orderCode,
+        order.customerName ?? undefined,
+        order.shippingAddress ?? undefined,
+      ).catch(err => console.error("Async Email Error:", err));
+    }
+
+    return res.status(201).json(order);
   } catch (error: any) {
     // Nếu lỗi tạo đơn hàng, xóa cache redis để cho phép thử lại
     if (req.body.idempotencyKey) {

@@ -4,7 +4,7 @@ import { prisma } from "../config/db.js";
 // POST /api/messages - Customer submits a new contact message
 export const submitMessage = async (req: Request, res: Response) => {
   try {
-    const { name, email, message } = req.body;
+    const { name, email, phone, subject, message } = req.body;
     
     if (!name || !email || !message) {
       return res.status(400).json({ error: "Vui lòng điền đầy đủ họ tên, email và lời nhắn." });
@@ -14,6 +14,8 @@ export const submitMessage = async (req: Request, res: Response) => {
       data: {
         name,
         email,
+        phone: phone || null,
+        subject: subject || null,
         message,
         status: "unread",
       },

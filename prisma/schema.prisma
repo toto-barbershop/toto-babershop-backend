@@ -169,30 +169,19 @@ model Course {
   status      String   @default("active")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  leads       Lead[]
-}
-
-model Lead {
-  id        String   @id @default(uuid())
-  name      String
-  phone     String
-  email     String?
-  courseId  String
-  course    Course   @relation(fields: [courseId], references: [id])
-  status    String   @default("new")
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 model Story {
   id          String   @id @default(uuid())
   title       String
   slug        String   @unique
-  excerpt     String?
-  content     String?
-  image       String?
-  publishedAt DateTime?
+  subtitle    String?
+  manifesto   String?
+  heroImage   String?
+  blocks      Json?
+  gallery     Json?
+  status      String   @default("draft")
+  order       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -240,6 +229,8 @@ model ContactMessage {
   id        String   @id @default(uuid())
   name      String
   email     String
+  phone     String?
+  subject   String?
   message   String
   status    String   @default("unread") // "unread", "read", "replied"
   createdAt DateTime @default(now())

@@ -487,16 +487,7 @@ async function main() {
     await prisma.course.upsert({ where: { slug: c.slug }, update: c, create: c });
   }
 
-  console.log('🌱 Seeding leads...');
-  const leads = [
-    { id: 'l-1', name: 'Trần Minh', phone: '0901234567', email: 'minh@example.com', courseId: 't-foundation', status: 'new', notes: 'Muốn học khóa nền tảng buổi tối.' },
-    { id: 'l-2', name: 'Lê Quang', phone: '0912345678', email: 'quang@example.com', courseId: 't-pro', status: 'contacted', notes: 'Đã làm barber 2 năm, muốn nâng cao fade.' },
-    { id: 'l-3', name: 'Phạm Hải', phone: '0987654321', email: 'hai@example.com', courseId: 't-foundation', status: 'converted', notes: 'Chuyển nghề, hỏi học phí trả góp.' },
-    { id: 'l-4', name: 'Ngô Tuấn', phone: '0977123456', email: 'tuan@example.com', courseId: 't-foundation', status: 'new', notes: 'Hỏi lịch khai giảng.' },
-  ];
-  for (const l of leads) {
-    await prisma.lead.upsert({ where: { id: l.id }, update: l, create: l });
-  }
+
 
   console.log('🌱 Seeding stories...');
   const stories = [
@@ -504,19 +495,29 @@ async function main() {
       id: 'st-origin',
       slug: 'the-origin',
       title: 'The Origin',
-      excerpt: 'Từ ghế cắt đến tủ đồ',
-      content: 'Toto Merchandise sinh ra từ văn hóa barber — nơi mỗi đường kéo, mỗi lần fade đều là một tuyên ngôn phong cách.',
-      image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-story-hero.jpg`,
-      publishedAt: new Date(),
+      subtitle: 'Từ ghế cắt đến tủ đồ',
+      manifesto: 'Toto Merchandise sinh ra từ văn hóa barber — nơi mỗi đường kéo, mỗi lần fade đều là một tuyên ngôn phong cách.',
+      heroImage: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-story-hero.jpg`,
+      blocks: [
+        { id: "b1", type: "quote", body: "Không chỉ là thợ cắt tóc, chúng tôi còn là những người kể chuyện qua từng sản phẩm." },
+        { id: "b2", type: "image", image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-story-hero.jpg` }
+      ],
+      gallery: [],
+      status: 'published',
     },
     {
       id: 'st-workwear',
       slug: 'workwear-chapter',
       title: 'Workwear Chapter',
-      excerpt: 'Bền bỉ như người thợ',
-      content: 'Lấy cảm hứng từ trang phục lao động, chương Workwear tôn vinh sự bền bỉ, thực dụng và vẻ đẹp mộc mạc của người thợ lành nghề.',
-      image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-jacket.png`,
-      publishedAt: new Date(),
+      subtitle: 'Bền bỉ như người thợ',
+      manifesto: 'Lấy cảm hứng từ trang phục lao động, chương Workwear tôn vinh sự bền bỉ, thực dụng và vẻ đẹp mộc mạc của người thợ lành nghề.',
+      heroImage: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-jacket.png`,
+      blocks: [
+        { id: "b3", type: "quote", body: "Bền bỉ, thực dụng, và mộc mạc." },
+        { id: "b4", type: "image", image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-jacket-detail.png` }
+      ],
+      gallery: [],
+      status: 'published',
     }
   ];
   for (const s of stories) {

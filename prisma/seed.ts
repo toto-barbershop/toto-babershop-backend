@@ -12,7 +12,7 @@ const products = [
     excerpt: 'Pomade gốc nước, giữ nếp mạnh, bóng vừa.',
     description:
       'Strong Hold Pomade là pomade gốc nước đặc trưng của Toto, cho độ giữ nếp cao suốt cả ngày mà vẫn dễ gội sạch. Mùi hương nam tính, khô nhẹ, phù hợp cho các kiểu classic, pompadour và slick back.',
-    images: ['/images/grooming-pomade.png', '/images/grooming-clay.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/grooming-pomade.png`, `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/grooming-clay.png`],
     basePrice: 220000,
     featured: true,
     status: 'active',
@@ -35,7 +35,7 @@ const products = [
     excerpt: 'Sáp tạo kiểu lì, độ phồng tự nhiên.',
     description:
       'Matte Styling Clay mang lại kết cấu lì hoàn toàn, tăng độ phồng và định hình mạnh cho tóc ngắn và trung bình. Lý tưởng cho crop, textured quiff và các kiểu tự nhiên.',
-    images: ['/images/grooming-clay.png', '/images/grooming-pomade.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/grooming-clay.png`, `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/grooming-pomade.png`],
     basePrice: 240000,
     featured: true,
     status: 'active',
@@ -55,7 +55,7 @@ const products = [
     excerpt: 'Dưỡng râu mềm mượt, giảm ngứa.',
     description:
       'Dầu dưỡng râu chiết xuất jojoba và argan giúp làm mềm, giảm ngứa và kích thích râu phát triển khỏe mạnh. Thẩm thấu nhanh, không nhờn rít.',
-    images: ['/images/grooming-beard-oil.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/grooming-beard-oil.png`],
     basePrice: 180000,
     compareAtPrice: 210000,
     featured: false,
@@ -77,7 +77,7 @@ const products = [
     excerpt: 'Dầu gội hằng ngày, sạch sâu, dịu nhẹ.',
     description:
       'Dầu gội làm sạch sâu bụi bẩn và dầu thừa mà không làm khô da đầu. Công thức dịu nhẹ dùng được hằng ngày, hương bạc hà mát lạnh.',
-    images: ['/images/grooming-shampoo.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/grooming-shampoo.png`],
     basePrice: 160000,
     featured: false,
     status: 'active',
@@ -97,7 +97,7 @@ const products = [
     excerpt: 'Bộ lược và bàn chải tạo kiểu chuyên nghiệp.',
     description:
       'Bộ combo lược carbon chống tĩnh điện và bàn chải lông tự nhiên, giúp tạo kiểu và làm mượt tóc như tại tiệm.',
-    images: ['/images/grooming-comb.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/grooming-comb.png`],
     basePrice: 150000,
     featured: false,
     status: 'active',
@@ -117,7 +117,7 @@ const products = [
     excerpt: 'Bộ quà chăm sóc trọn gói cho quý ông.',
     description:
       'Bộ quà tặng gồm pomade, dầu dưỡng râu và lược, đóng hộp sang trọng — món quà hoàn hảo cho phái mạnh.',
-    images: ['/images/grooming-kit.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/grooming-kit.png`],
     basePrice: 520000,
     compareAtPrice: 620000,
     featured: true,
@@ -138,7 +138,7 @@ const products = [
     excerpt: 'Áo thun cotton dày, form regular, logo ngực.',
     description:
       'Áo thun cotton 250gsm dày dặn, form regular streetwear, in logo Toto tối giản ở ngực. Bền màu, thoáng mát, mặc quanh năm.',
-    images: ['/images/merch-tee.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-tee.png`],
     basePrice: 320000,
     featured: true,
     status: 'active',
@@ -161,7 +161,7 @@ const products = [
     excerpt: 'Nón nhung tăm màu rêu, logo thêu.',
     description:
       'Nón lưỡi trai chất liệu nhung tăm màu xanh rêu đặc trưng, logo thêu nổi, khoá điều chỉnh kim loại. Phụ kiện hoàn thiện set đồ.',
-    images: ['/images/merch-cap.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-cap.png`],
     basePrice: 250000,
     featured: true,
     status: 'active',
@@ -182,7 +182,7 @@ const products = [
     excerpt: 'Hoodie nỉ dày, in lưng tối giản.',
     description:
       'Hoodie nỉ bông 380gsm giữ ấm tốt, form oversized nhẹ, in lưng tối giản. Item chủ lực cho mùa lạnh.',
-    images: ['/images/merch-hoodie.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-hoodie.png`],
     basePrice: 590000,
     featured: false,
     status: 'active',
@@ -204,7 +204,7 @@ const products = [
     excerpt: 'Túi canvas in lụa logo, bền chắc.',
     description:
       'Túi tote vải canvas dày, in lụa logo màu rêu, quai chắc chắn — đựng đồ mỗi ngày hoặc làm phụ kiện phối đồ.',
-    images: ['/images/merch-tote.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-tote.png`],
     basePrice: 180000,
     featured: false,
     status: 'active',
@@ -224,7 +224,7 @@ const products = [
     excerpt: 'Áo khoác chore coat vải bố màu rêu.',
     description:
       'Chore jacket vải bố cotton màu xanh rêu, nhiều túi hộp tiện dụng, form vừa vặn, phối được nhiều phong cách.',
-    images: ['/images/merch-jacket.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-jacket.png`],
     basePrice: 780000,
     featured: true,
     status: 'active',
@@ -245,7 +245,7 @@ const products = [
     excerpt: 'Tất cổ trung dệt logo, cotton co giãn.',
     description:
       'Tất cổ trung chất cotton co giãn, gân dệt và logo nhỏ ở cổ. Bán theo set 2 đôi đen và rêu.',
-    images: ['/images/merch-socks.png'],
+    images: [`${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-socks.png`],
     basePrice: 90000,
     featured: false,
     status: 'active',
@@ -281,12 +281,12 @@ async function main() {
 
   console.log('\n🌱 Seeding services...');
   const services = [
-    { slug: 'classic-haircut', name: 'Classic Haircut', category: 'Cắt tóc', price: 150000, duration: 45, description: 'Cắt tóc cổ điển theo khuôn mặt, gội và tạo kiểu hoàn thiện.', process: ['Tư vấn kiểu tóc', 'Cắt & tỉa', 'Gội massage', 'Tạo kiểu'], image: '/images/barber-1.png', featured: true, order: 1, status: 'active' },
-    { slug: 'skin-fade', name: 'Skin Fade', category: 'Cắt tóc', price: 200000, duration: 60, description: 'Fade da đầu chuẩn từng lớp, đường nét sắc sảo, hiện đại.', process: ['Tư vấn độ fade', 'Tông đơ tạo lớp', 'Line-up', 'Tạo kiểu'], image: '/images/lookbook-3.png', featured: true, order: 2, status: 'active' },
-    { slug: 'beard-shaping', name: 'Beard Shaping & Hot Towel', category: 'Cạo râu', price: 120000, duration: 30, description: 'Tạo dáng râu, cạo dao cạo truyền thống kèm khăn nóng thư giãn.', process: ['Khăn nóng', 'Tạo dáng râu', 'Cạo dao', 'Dưỡng da'], image: '/images/lookbook-5.png', featured: true, order: 3, status: 'active' },
-    { slug: 'the-full-service', name: 'The Full Service', category: 'Combo', price: 300000, duration: 90, description: 'Combo trọn gói: cắt tóc, fade, cạo râu và tạo kiểu cao cấp.', process: ['Tư vấn tổng thể', 'Cắt & fade', 'Cạo râu hot towel', 'Gội & tạo kiểu'], image: '/images/hero.png', featured: true, order: 4, status: 'active' },
-    { slug: 'kids-cut', name: 'Kids Cut', category: 'Cắt tóc', price: 100000, duration: 30, description: 'Cắt tóc cho bé nhẹ nhàng, thân thiện, tạo kiểu dễ thương.', process: ['Trò chuyện với bé', 'Cắt & tỉa', 'Tạo kiểu'], image: '/images/barber-2.png', featured: false, order: 5, status: 'active' },
-    { slug: 'hair-color', name: 'Hair Color', category: 'Nhuộm', price: 450000, duration: 120, description: 'Nhuộm màu thời trang hoặc phủ bạc, chăm sóc màu bền đẹp.', process: ['Tư vấn màu', 'Tẩy/nhuộm', 'Dưỡng màu', 'Tạo kiểu'], image: '/images/lookbook-4.png', featured: false, order: 6, status: 'active' },
+    { slug: 'classic-haircut', name: 'Classic Haircut', category: 'Cắt tóc', price: 150000, duration: 45, description: 'Cắt tóc cổ điển theo khuôn mặt, gội và tạo kiểu hoàn thiện.', process: ['Tư vấn kiểu tóc', 'Cắt & tỉa', 'Gội massage', 'Tạo kiểu'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/barber-1.png`, featured: true, order: 1, status: 'active' },
+    { slug: 'skin-fade', name: 'Skin Fade', category: 'Cắt tóc', price: 200000, duration: 60, description: 'Fade da đầu chuẩn từng lớp, đường nét sắc sảo, hiện đại.', process: ['Tư vấn độ fade', 'Tông đơ tạo lớp', 'Line-up', 'Tạo kiểu'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-3.png`, featured: true, order: 2, status: 'active' },
+    { slug: 'beard-shaping', name: 'Beard Shaping & Hot Towel', category: 'Cạo râu', price: 120000, duration: 30, description: 'Tạo dáng râu, cạo dao cạo truyền thống kèm khăn nóng thư giãn.', process: ['Khăn nóng', 'Tạo dáng râu', 'Cạo dao', 'Dưỡng da'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-5.png`, featured: true, order: 3, status: 'active' },
+    { slug: 'the-full-service', name: 'The Full Service', category: 'Combo', price: 300000, duration: 90, description: 'Combo trọn gói: cắt tóc, fade, cạo râu và tạo kiểu cao cấp.', process: ['Tư vấn tổng thể', 'Cắt & fade', 'Cạo râu hot towel', 'Gội & tạo kiểu'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/hero.png`, featured: true, order: 4, status: 'active' },
+    { slug: 'kids-cut', name: 'Kids Cut', category: 'Cắt tóc', price: 100000, duration: 30, description: 'Cắt tóc cho bé nhẹ nhàng, thân thiện, tạo kiểu dễ thương.', process: ['Trò chuyện với bé', 'Cắt & tỉa', 'Tạo kiểu'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/barber-2.png`, featured: false, order: 5, status: 'active' },
+    { slug: 'hair-color', name: 'Hair Color', category: 'Nhuộm', price: 450000, duration: 120, description: 'Nhuộm màu thời trang hoặc phủ bạc, chăm sóc màu bền đẹp.', process: ['Tư vấn màu', 'Tẩy/nhuộm', 'Dưỡng màu', 'Tạo kiểu'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-4.png`, featured: false, order: 6, status: 'active' },
   ];
 
   for (const s of services) {
@@ -468,7 +468,7 @@ async function main() {
       description: 'Từ cách cầm tông đơ đến hoàn thiện một kiểu cắt cơ bản.',
       duration: '8 tuần',
       price: 12000000,
-      image: '/images/training.png',
+      image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/training.png`,
       status: 'active',
     },
     {
@@ -479,7 +479,7 @@ async function main() {
       description: 'Tập trung vào fade phức tạp, freestyle và xây dựng phong cách cá nhân.',
       duration: '6 tuần',
       price: 18000000,
-      image: '/images/lookbook-3.png',
+      image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-3.png`,
       status: 'active',
     }
   ];
@@ -506,7 +506,7 @@ async function main() {
       title: 'The Origin',
       excerpt: 'Từ ghế cắt đến tủ đồ',
       content: 'Toto Merchandise sinh ra từ văn hóa barber — nơi mỗi đường kéo, mỗi lần fade đều là một tuyên ngôn phong cách.',
-      image: '/images/merch-story-hero.jpg',
+      image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-story-hero.jpg`,
       publishedAt: new Date(),
     },
     {
@@ -515,7 +515,7 @@ async function main() {
       title: 'Workwear Chapter',
       excerpt: 'Bền bỉ như người thợ',
       content: 'Lấy cảm hứng từ trang phục lao động, chương Workwear tôn vinh sự bền bỉ, thực dụng và vẻ đẹp mộc mạc của người thợ lành nghề.',
-      image: '/images/merch-jacket.png',
+      image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-jacket.png`,
       publishedAt: new Date(),
     }
   ];
@@ -525,11 +525,11 @@ async function main() {
 
   console.log('🌱 Seeding lookbooks...');
   const lookbooks = [
-    { id: 'lb-1', image: '/images/lookbook-1.png', title: 'Pompadour cổ điển', category: 'Classic', tags: ['Classic'] },
-    { id: 'lb-2', image: '/images/lookbook-2.png', title: 'Textured crop & beard', category: 'Modern', tags: ['Modern'] },
-    { id: 'lb-3', image: '/images/lookbook-3.png', title: 'Skin fade sắc nét', category: 'Fade', tags: ['Fade'] },
-    { id: 'lb-4', image: '/images/lookbook-4.png', title: 'Side part thanh lịch', category: 'Classic', tags: ['Classic'] },
-    { id: 'lb-shop-1', image: '/images/ourshop-1.jpg', title: 'Shop Interior 1', category: 'Shop', tags: ['Shop'] },
+    { id: 'lb-1', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-1.png`, title: 'Pompadour cổ điển', category: 'Classic', tags: ['Classic'] },
+    { id: 'lb-2', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-2.png`, title: 'Textured crop & beard', category: 'Modern', tags: ['Modern'] },
+    { id: 'lb-3', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-3.png`, title: 'Skin fade sắc nét', category: 'Fade', tags: ['Fade'] },
+    { id: 'lb-4', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-4.png`, title: 'Side part thanh lịch', category: 'Classic', tags: ['Classic'] },
+    { id: 'lb-shop-1', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/ourshop-1.jpg`, title: 'Shop Interior 1', category: 'Shop', tags: ['Shop'] },
   ];
   for (const lb of lookbooks) {
     await prisma.lookbook.upsert({ where: { id: lb.id }, update: lb, create: lb });
@@ -537,12 +537,40 @@ async function main() {
 
   console.log('🌱 Seeding media...');
   const media = [
-    { id: "med_01", url: "/images/hero.png", filename: "hero.png", type: "image", size: 1200000 },
-    { id: "med_02", url: "/images/interior.png", filename: "interior.png", type: "image", size: 980000 },
-    { id: "med_03", url: "/images/barber-1.png", filename: "barber-1.png", type: "image", size: 760000 },
+    { id: "med_01", url: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/hero.png`, filename: "hero.png", type: "image", size: 1200000 },
+    { id: "med_02", url: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/interior.png`, filename: "interior.png", type: "image", size: 980000 },
+    { id: "med_03", url: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/barber-1.png`, filename: "barber-1.png", type: "image", size: 760000 },
   ];
   for (const m of media) {
     await prisma.media.upsert({ where: { id: m.id }, update: m, create: m });
+  }
+
+  console.log('🌱 Seeding FAQs...');
+  const faqs = [
+    // Shop FAQs
+    { question: 'Thời gian giao hàng là bao lâu?', answer: 'Thông thường nội thành TPHCM 1-2 ngày, ngoại thành 3-5 ngày.', category: 'shop', order: 1 },
+    { question: 'Có được kiểm tra hàng trước khi nhận không?', answer: 'Có, bạn được quyền kiểm tra hàng trước khi thanh toán.', category: 'shop', order: 2 },
+    { question: 'Tôi có thể đổi trả sản phẩm không?', answer: 'Shop hỗ trợ đổi trả trong vòng 3 ngày đối với các sản phẩm chưa qua sử dụng và còn nguyên tem mác.', category: 'shop', order: 3 },
+    
+    // Service FAQs
+    { question: 'Có cần đặt lịch trước khi cắt không?', answer: 'Nên đặt lịch trước để tránh phải đợi lâu, đặc biệt là vào dịp cuối tuần hoặc lễ Tết.', category: 'service', order: 1 },
+    { question: 'Giá cắt tóc đã bao gồm gội đầu chưa?', answer: 'Đã bao gồm. Dịch vụ cắt tóc của Toto luôn đi kèm combo gội, massage đầu và tạo kiểu bằng sáp/pomade chuyên dụng.', category: 'service', order: 2 },
+    { question: 'Nếu tôi đến muộn hơn giờ đã hẹn thì sao?', answer: 'Nếu bạn đến trễ quá 15 phút, chúng tôi xin phép được hủy lịch hoặc sắp xếp bạn vào khung giờ trống tiếp theo để không ảnh hưởng đến khách hàng sau.', category: 'service', order: 3 },
+    { question: 'Shop có nhận cắt tóc cho trẻ em không?', answer: 'Có, chúng tôi có phục vụ cắt tóc cho các bé trai từ 3 tuổi trở lên. Tuy nhiên bé cần có sự đồng hành của phụ huynh để đảm bảo an toàn.', category: 'service', order: 4 },
+  ];
+  await prisma.faq.deleteMany({});
+  for (const f of faqs) {
+    await prisma.faq.create({ data: f });
+  }
+
+  console.log('🌱 Seeding Settings...');
+  const settingsData = {
+    business: { name: 'TOTO BARBERSHOP' },
+    contact: { email: 'hello@totobarbershop.com', phone: '0901234567', address: '123 Đường ABC, Quận 1, TPHCM' },
+    socials: { facebook: 'https://facebook.com/totobarbershop', instagram: 'https://instagram.com/totobarbershop', tiktok: 'https://tiktok.com/@totobarbershop' }
+  };
+  for (const [key, value] of Object.entries(settingsData)) {
+    await prisma.setting.upsert({ where: { key }, update: { value: value as any }, create: { key, value: value as any } });
   }
 
   console.log('\n🎉 Seed hoàn tất!');

@@ -31,7 +31,8 @@ export const register = async (req: Request, res: Response) => {
         password: hashedPassword,
         name,
         role: 'CUSTOMER'
-      }
+      },
+      include: { addresses: true }
     });
 
     const currentVersionStr = await redis.get(`tokenVersion:${user.id}`);
@@ -48,7 +49,7 @@ export const register = async (req: Request, res: Response) => {
 
     res.status(201).json({
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role }
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, addresses: user.addresses }
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to register user' });
@@ -63,7 +64,10 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ 
+      where: { email },
+      include: { addresses: true }
+    });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -87,7 +91,7 @@ export const login = async (req: Request, res: Response) => {
 
     res.json({
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role }
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, addresses: user.addresses }
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to log in' });
@@ -190,6 +194,45 @@ export const resetPassword = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ error: 'Failed to reset password' });
+  }
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Mật khẩu hiện tại và mật khẩu mới là bắt buộc' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+    if (!isValidPassword) {
+      return res.status(400).json({ error: 'Mật khẩu hiện tại không đúng' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword }
+    });
+
+    // Thu hồi session cũ
+    await redis.incr(`tokenVersion:${userId}`);
+
+    res.json({ message: 'Đổi mật khẩu thành công' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Lỗi khi đổi mật khẩu' });
   }
 };
 

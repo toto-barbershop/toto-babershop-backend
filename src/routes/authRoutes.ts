@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { login, register, forgotPassword, resetPassword, getUsers, createUser, logout } from '../controllers/authController.js';
+import { login, register, forgotPassword, resetPassword, getUsers, createUser, logout, changePassword } from '../controllers/authController.js';
 import { authenticateToken } from '../middlewares/authMiddleware.js';
 import { RedisStore } from 'rate-limit-redis';
 import redis from '../config/redis.js';
@@ -34,6 +34,7 @@ router.post('/logout', authenticateToken, logout);
 router.post('/register', register);
 router.post('/forgot-password', forgotPasswordLimiter, forgotPassword);
 router.post('/reset-password', resetPassword);
+router.post('/change-password', authenticateToken, changePassword);
 
 router.get('/users', getUsers);
 router.post('/users', createUser);

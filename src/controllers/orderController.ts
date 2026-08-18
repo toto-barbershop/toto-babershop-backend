@@ -109,6 +109,36 @@ export const createOrder = async (req: Request, res: Response) => {
         }
       }
 
+      // Lưu địa chỉ mặc định cho user (nếu có địa chỉ đầy đủ)
+      if (userId && address && typeof address === 'object' && address.province) {
+        const userAddresses = await tx.address.findMany({ where: { userId } });
+        const existingDefault = userAddresses.find(a => a.isDefault) || userAddresses[0];
+        
+        if (existingDefault) {
+          await tx.address.update({
+            where: { id: existingDefault.id },
+            data: {
+              province: address.province,
+              district: address.district,
+              ward: address.ward,
+              street: address.street,
+              isDefault: true
+            }
+          });
+        } else {
+          await tx.address.create({
+            data: {
+              userId,
+              province: address.province,
+              district: address.district,
+              ward: address.ward,
+              street: address.street,
+              isDefault: true
+            }
+          });
+        }
+      }
+
       // Tạo đơn hàng
       const newOrder = await tx.order.create({
         data: {

@@ -9,6 +9,6 @@ router.post("/", authenticateToken, requireAdmin, createPromoCode);
 router.put("/:id", authenticateToken, requireAdmin, updatePromoCode);
 router.delete("/:id", authenticateToken, requireAdmin, deletePromoCode);
 
-router.post("/validate", authenticateToken, validatePromoCode);
+router.post("/validate", validatePromoCode);
 
 export default router;

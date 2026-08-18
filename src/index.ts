@@ -15,6 +15,9 @@ import leadRoutes from './routes/leadRoutes.js';
 import storyRoutes from './routes/storyRoutes.js';
 import lookbookRoutes from './routes/lookbookRoutes.js';
 import mediaRoutes from './routes/mediaRoutes.js';
+import faqRoutes from './routes/faqRoutes.js';
+import settingRoutes from './routes/settingRoutes.js';
+import messageRoutes from './routes/messageRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -62,6 +65,9 @@ app.use('/api/leads', leadRoutes);
 app.use('/api/stories', storyRoutes);
 app.use('/api/lookbooks', lookbookRoutes);
 app.use('/api/media', mediaRoutes);
+app.use('/api/faqs', faqRoutes);
+app.use('/api/settings', settingRoutes);
+app.use('/api/messages', messageRoutes);
 
 export { app };
 

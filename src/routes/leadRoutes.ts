@@ -4,9 +4,9 @@ import { authenticateToken, requireAdmin } from '../middlewares/authMiddleware.j
 
 const router = Router();
 
-router.get('/', getLeads);
-router.get('/:id', getLead);
-router.post('/', authenticateToken, requireAdmin, createLead);
+router.get('/', authenticateToken, requireAdmin, getLeads);
+router.get('/:id', authenticateToken, requireAdmin, getLead);
+router.post('/', createLead);
 router.put('/:id', authenticateToken, requireAdmin, updateLead);
 router.delete('/:id', authenticateToken, requireAdmin, deleteLead);
 

@@ -41,3 +41,107 @@ export const sendPasswordResetEmail = async (toEmail: string, otpCode: string) =
     throw new Error('Không thể gửi email. Vui lòng thử lại sau.');
   }
 };
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+
+export const sendOrderEmails = async (
+  orderId: number,
+  total: number,
+  customerEmail: string,
+  orderCode?: string,
+  customerName?: string,
+  shippingAddress?: string,
+) => {
+  const displayCode = orderCode || `#${orderId}`;
+  const displayName = customerName || 'Quý khách';
+  const displayAddress = shippingAddress || 'Chưa cập nhật';
+
+  if (!resend) {
+    console.log(`[SIMULATED EMAIL] New order ${displayCode} created. Emails sent to Admin and ${customerEmail}.`);
+    return;
+  }
+  
+  try {
+    // 1. Email cho Khách hàng
+    const customerHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
+        <div style="background: #d71920; padding: 20px 24px;">
+          <h2 style="color: #fff; margin: 0;">TOTO Barbershop</h2>
+        </div>
+        <div style="padding: 24px;">
+          <p>Xin chào <strong>${displayName}</strong>,</p>
+          <p>Cảm ơn bạn đã đặt hàng tại TOTO Barbershop! Đơn hàng của bạn đã được ghi nhận thành công.</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+            <tr style="background: #f9f9f9;">
+              <td style="padding: 10px; border: 1px solid #eee; font-weight: bold;">Mã đơn hàng</td>
+              <td style="padding: 10px; border: 1px solid #eee; color: #d71920; font-weight: bold;">${displayCode}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px; border: 1px solid #eee; font-weight: bold;">Tổng giá trị</td>
+              <td style="padding: 10px; border: 1px solid #eee;">${formatCurrency(total)}</td>
+            </tr>
+            <tr style="background: #f9f9f9;">
+              <td style="padding: 10px; border: 1px solid #eee; font-weight: bold;">Địa chỉ giao hàng</td>
+              <td style="padding: 10px; border: 1px solid #eee;">${displayAddress}</td>
+            </tr>
+          </table>
+          <p>Chúng tôi sẽ liên hệ với bạn trong thời gian sớm nhất để xác nhận đơn hàng.</p>
+          <p>Trân trọng,<br><strong>Đội ngũ TOTO Barbershop</strong></p>
+        </div>
+      </div>
+    `;
+
+    // 2. Email cho Admin
+    const adminHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
+        <div style="background: #d71920; padding: 20px 24px;">
+          <h2 style="color: #fff; margin: 0;">[ĐƠN HÀNG MỚI] ${displayCode}</h2>
+        </div>
+        <div style="padding: 24px;">
+          <p>Hệ thống vừa ghi nhận một đơn hàng mới.</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+            <tr style="background: #f9f9f9;">
+              <td style="padding: 10px; border: 1px solid #eee; font-weight: bold;">Mã đơn</td>
+              <td style="padding: 10px; border: 1px solid #eee; color: #d71920; font-weight: bold;">${displayCode}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px; border: 1px solid #eee; font-weight: bold;">Khách hàng</td>
+              <td style="padding: 10px; border: 1px solid #eee;">${displayName}</td>
+            </tr>
+            <tr style="background: #f9f9f9;">
+              <td style="padding: 10px; border: 1px solid #eee; font-weight: bold;">Email</td>
+              <td style="padding: 10px; border: 1px solid #eee;">${customerEmail}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px; border: 1px solid #eee; font-weight: bold;">Địa chỉ giao</td>
+              <td style="padding: 10px; border: 1px solid #eee;">${displayAddress}</td>
+            </tr>
+            <tr style="background: #f9f9f9;">
+              <td style="padding: 10px; border: 1px solid #eee; font-weight: bold;">Tổng tiền</td>
+              <td style="padding: 10px; border: 1px solid #eee;"><strong>${formatCurrency(total)}</strong></td>
+            </tr>
+          </table>
+          <p>Vui lòng đăng nhập vào trang quản trị để xem chi tiết và xử lý đơn hàng.</p>
+        </div>
+      </div>
+    `;
+
+    await Promise.all([
+      resend.emails.send({
+        from: 'TOTO Barbershop <onboarding@resend.dev>',
+        to: customerEmail,
+        subject: `Xác nhận đơn hàng ${displayCode} - TOTO Barbershop`,
+        html: customerHtml,
+      }),
+      resend.emails.send({
+        from: 'TOTO Barbershop <onboarding@resend.dev>',
+        to: process.env.ADMIN_EMAIL || 'admin@totobarbershop.com',
+        subject: `[ĐƠN HÀNG MỚI] ${displayCode} - ${displayName}`,
+        html: adminHtml,
+      })
+    ]);
+  } catch (error) {
+    console.error('Error sending order emails:', error);
+  }
+};

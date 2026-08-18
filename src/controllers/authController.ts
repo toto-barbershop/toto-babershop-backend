@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { prisma } from '../config/db.js';
 import { sendPasswordResetEmail } from '../services/emailService.js';
 import redis from '../config/redis.js';
+import { isValidEmail } from '../utils/validation.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -17,6 +18,9 @@ export const register = async (req: Request, res: Response) => {
 
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Email, password, and name are required' });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'Email không hợp lệ' });
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -63,6 +67,9 @@ export const login = async (req: Request, res: Response) => {
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'Email không hợp lệ' });
+    }
 
     const user = await prisma.user.findUnique({ 
       where: { email },
@@ -101,9 +108,8 @@ export const login = async (req: Request, res: Response) => {
 export const forgotPassword = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
-    }
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'Email không hợp lệ' });
 
     const user = await prisma.user.findUnique({ where: { email } });
     

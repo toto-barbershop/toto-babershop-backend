@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../config/db.js';
 import { createRequire } from 'module';
 import redis from '../config/redis.js';
+import { isValidEmail, isValidPhone } from '../utils/validation.js';
 
 // @payos/node export dạng { PayOS, PayOSError, ... } — không phải default export
 const require = createRequire(import.meta.url);
@@ -33,6 +34,12 @@ export const createOrder = async (req: Request, res: Response) => {
       if (!guestEmail) {
         return res.status(400).json({ error: 'Thiếu email để đặt hàng' });
       }
+      if (!isValidEmail(guestEmail)) {
+        return res.status(400).json({ error: 'Email không hợp lệ' });
+      }
+      if (guestPhone && !isValidPhone(guestPhone)) {
+        return res.status(400).json({ error: 'Số điện thoại không hợp lệ' });
+      }
 
       let guestUser = await prisma.user.findUnique({ where: { email: guestEmail } });
       
@@ -50,8 +57,19 @@ export const createOrder = async (req: Request, res: Response) => {
         });
       }
       userId = guestUser.id;
+    } else if (customer && customer.phone) {
+      if (!isValidPhone(customer.phone)) {
+        return res.status(400).json({ error: 'Số điện thoại không hợp lệ' });
+      }
+      // Cập nhật SĐT và tên cho user đã đăng nhập nếu họ điền form
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          phone: customer.phone,
+          ...(customer.name && { name: customer.name })
+        }
+      });
     }
-
 
     // Kiểm tra Idempotency Key bằng Redis (chặn double-submit tức thì)
     const redisIdempotencyKey = `idempotency:${idempotencyKey}`;

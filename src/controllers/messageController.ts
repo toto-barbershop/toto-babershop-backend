@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { prisma } from "../config/db.js";
+import { isValidEmail, isValidPhone } from "../utils/validation.js";
 
 // POST /api/messages - Customer submits a new contact message
 export const submitMessage = async (req: Request, res: Response) => {
@@ -8,6 +9,14 @@ export const submitMessage = async (req: Request, res: Response) => {
     
     if (!name || !email || !message) {
       return res.status(400).json({ error: "Vui lòng điền đầy đủ họ tên, email và lời nhắn." });
+    }
+    
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: "Email không hợp lệ." });
+    }
+    
+    if (phone && !isValidPhone(phone)) {
+      return res.status(400).json({ error: "Số điện thoại không hợp lệ." });
     }
 
     const newMessage = await prisma.contactMessage.create({

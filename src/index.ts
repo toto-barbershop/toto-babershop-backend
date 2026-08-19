@@ -71,6 +71,12 @@ app.use('/api/faqs', faqRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/messages', messageRoutes);
 
+// Global Error Handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Unhandled Error:', err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
 export { app };
 
 const PORT = process.env.PORT || 5000;

@@ -249,7 +249,7 @@ export const createOrder = async (req: Request, res: Response) => {
     if (emailAddr) {
       sendOrderEmails(
         order.id, total, emailAddr,
-        order.orderCode,
+        order.orderCode ?? undefined,
         order.customerName ?? undefined,
         order.shippingAddress ?? undefined,
       ).catch(err => console.error("Async Email Error:", err));

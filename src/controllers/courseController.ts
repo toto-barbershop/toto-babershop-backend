@@ -12,7 +12,7 @@ export const getCourses = async (req: Request, res: Response) => {
 
 export const getCourse = async (req: Request, res: Response) => {
   try {
-    const data = await prisma.course.findUnique({ where: { id: req.params.id } });
+    const data = await prisma.course.findUnique({ where: { id: (req.params.id as string) } });
     if (!data) return res.status(404).json({ error: 'Không tìm thấy' });
     res.json(data);
   } catch (error: any) {
@@ -31,7 +31,7 @@ export const createCourse = async (req: Request, res: Response) => {
 
 export const updateCourse = async (req: Request, res: Response) => {
   try {
-    const data = await prisma.course.update({ where: { id: req.params.id }, data: req.body });
+    const data = await prisma.course.update({ where: { id: (req.params.id as string) }, data: req.body });
     res.json(data);
   } catch (error: any) {
     res.status(400).json({ error: 'Lỗi cập nhật' });
@@ -40,7 +40,7 @@ export const updateCourse = async (req: Request, res: Response) => {
 
 export const deleteCourse = async (req: Request, res: Response) => {
   try {
-    await prisma.course.delete({ where: { id: req.params.id } });
+    await prisma.course.delete({ where: { id: (req.params.id as string) } });
     res.json({ message: 'Xóa thành công' });
   } catch (error: any) {
     res.status(400).json({ error: 'Lỗi xóa' });

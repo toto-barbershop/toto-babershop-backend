@@ -246,14 +246,14 @@ export const createOrder = async (req: Request, res: Response) => {
 
     // Fire & Forget: Gửi email bất đồng bộ, không dùng await
     const emailAddr = order.customerEmail || email;
-    if (emailAddr) {
-      sendOrderEmails(
-        order.id, total, emailAddr,
-        order.orderCode ?? undefined,
-        order.customerName ?? undefined,
-        order.shippingAddress ?? undefined,
-      ).catch(err => console.error("Async Email Error:", err));
-    }
+      if (emailAddr) {
+        sendOrderEmails(
+          order.id, total, emailAddr,
+          order.orderCode ?? undefined,
+          order.customerName ?? undefined,
+          order.shippingAddress ?? undefined,
+        ).catch(err => console.error("Async Email Error:", err));
+      }
 
     return res.status(201).json(order);
   } catch (error: any) {

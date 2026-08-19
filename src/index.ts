@@ -24,7 +24,7 @@ import { globalLimiter } from './middlewares/rateLimitMiddleware.js';
 const app = express();
 
 // Security HTTP Headers
-app.use((helmet as any)());
+app.use(helmet());
 
 // Apply global rate limiting to all requests
 app.use(globalLimiter);
@@ -71,7 +71,13 @@ app.use('/api/faqs', faqRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/messages', messageRoutes);
 
-export default app;
+// Global Error Handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Unhandled Error:', err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
+export { app };
 
 const PORT = process.env.PORT || 5000;
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

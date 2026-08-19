@@ -24,7 +24,7 @@ import { globalLimiter } from './middlewares/rateLimitMiddleware.js';
 const app = express();
 
 // Security HTTP Headers
-app.use(helmet());
+app.use((helmet as any)());
 
 // Apply global rate limiting to all requests
 app.use(globalLimiter);

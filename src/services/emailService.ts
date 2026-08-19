@@ -36,7 +36,12 @@ export const sendPasswordResetEmail = async (toEmail: string, otpCode: string) =
     });
 
     return { success: true, data };
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.error?.name === 'validation_error' && error?.error?.message?.includes('own email address')) {
+      console.warn(`\n[Resend Test Mode] Bỏ qua gửi OTP đến ${toEmail} do Resend chưa xác thực domain.`);
+      console.log(`[DEV MODE] MÃ OTP CỦA BẠN LÀ: ${otpCode}\n`);
+      return { success: true, simulated: true };
+    }
     console.error('Error sending email:', error);
     throw new Error('Không thể gửi email. Vui lòng thử lại sau.');
   }
@@ -127,14 +132,26 @@ export const sendOrderEmails = async (
       </div>
     `;
 
+    const safeSend = async (payload: any) => {
+      try {
+        await resend.emails.send(payload);
+      } catch (err: any) {
+        if (err?.error?.name === 'validation_error' && err?.error?.message?.includes('own email address')) {
+          console.warn(`[Resend Test Mode] Bỏ qua gửi email đến ${payload.to} do chưa xác thực domain.`);
+        } else {
+          console.error(`[Resend] Error sending email to ${payload.to}:`, err);
+        }
+      }
+    };
+
     await Promise.all([
-      resend.emails.send({
+      safeSend({
         from: 'TOTO Barbershop <onboarding@resend.dev>',
         to: customerEmail,
         subject: `Xác nhận đơn hàng ${displayCode} - TOTO Barbershop`,
         html: customerHtml,
       }),
-      resend.emails.send({
+      safeSend({
         from: 'TOTO Barbershop <onboarding@resend.dev>',
         to: process.env.ADMIN_EMAIL || 'admin@totobarbershop.com',
         subject: `[ĐƠN HÀNG MỚI] ${displayCode} - ${displayName}`,
@@ -142,6 +159,6 @@ export const sendOrderEmails = async (
       })
     ]);
   } catch (error) {
-    console.error('Error sending order emails:', error);
+    console.error('Error in sendOrderEmails workflow:', error);
   }
 };

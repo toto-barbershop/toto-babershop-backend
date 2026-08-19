@@ -34,7 +34,6 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: "postgresql://postgres:postgres@db:5432/totodb?schema=public&connection_limit=20"
       REDIS_URL: "redis://redis:6379"
     ports:
       - "5000:5000"
@@ -43,7 +42,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: sh -c "npx prisma db push --accept-data-loss && npx prisma db seed && npm run start"
+    command: npm run start
     volumes:
       - uploads_data:/app/public/uploads
 

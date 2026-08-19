@@ -71,7 +71,7 @@ app.use('/api/faqs', faqRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/messages', messageRoutes);
 
-export { app };
+export default app;
 
 const PORT = process.env.PORT || 5000;
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -1,7 +1,7 @@
 import rateLimit from 'express-rate-limit';
 
 // Global limit: 200 requests / 15 minutes
-export const globalLimiter = (rateLimit as any)({
+export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 200,
   standardHeaders: true,
@@ -10,7 +10,7 @@ export const globalLimiter = (rateLimit as any)({
 });
 
 // Checkout limit: 5 requests / 10 minutes
-export const checkoutLimiter = (rateLimit as any)({
+export const checkoutLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 5,
   standardHeaders: true,
@@ -19,7 +19,7 @@ export const checkoutLimiter = (rateLimit as any)({
 });
 
 // Auth limit: 10 requests / 15 minutes (for login/register/forgot-password)
-export const authLimiter = (rateLimit as any)({
+export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,

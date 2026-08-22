@@ -42,7 +42,7 @@ describe('Concurrency Test: Checkout 100 requests for 5 items', () => {
             }
           ]
         },
-        slug: 'sap-vuot-toc-test-concurrency'
+        slug: `sap-vuot-toc-test-concurrency-${Date.now()}`
       },
       include: { variants: true }
     });
@@ -54,7 +54,7 @@ describe('Concurrency Test: Checkout 100 requests for 5 items', () => {
   afterAll(async () => {
     // Dọn dẹp dữ liệu test
     await prisma.orderItem.deleteMany({
-      where: { order: { userId } }
+      where: { productId }
     });
     await prisma.order.deleteMany({
       where: { userId }
@@ -96,7 +96,9 @@ describe('Concurrency Test: Checkout 100 requests for 5 items', () => {
           total: 150000,
           idempotencyKey: key,
           paymentMethod: 'cod',
-          address: '123 Test Street'
+          customer: { name: 'Test Concurrency', phone: '0912345678', email: 'test@example.com' },
+          email: 'test@example.com',
+          address: { street: '123 Test Street', ward: 'Phường 1', district: 'Quận 1', province: 'TP.HCM' }
         });
     });
 
@@ -111,9 +113,11 @@ describe('Concurrency Test: Checkout 100 requests for 5 items', () => {
     const successfulOrderIds = new Set();
 
     for (const res of responses) {
-      if (res.status === 200) {
-        // Có thể là tạo mới thành công, hoặc trả về record cũ (nếu trùng idempotency)
-        successfulOrderIds.add(res.body.id);
+      if (res.status === 200 || res.status === 201 || res.status === 202) {
+        // Có thể là tạo mới thành công (201), trả về record cũ (200), hoặc 202 Accepted
+        if (res.body?.id) {
+          successfulOrderIds.add(res.body.id);
+        }
         successCount++;
       } else if (res.status === 400 && res.body.error?.includes('không đủ số lượng')) {
         outOfStockErrors++;

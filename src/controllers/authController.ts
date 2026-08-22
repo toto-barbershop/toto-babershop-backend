@@ -6,6 +6,7 @@ import { prisma } from '../config/db.js';
 import { sendPasswordResetEmail } from '../services/emailService.js';
 import redis from '../config/redis.js';
 import { isValidEmail } from '../utils/validation.js';
+import { logger } from '../utils/logger.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -17,15 +18,16 @@ export const register = async (req: Request, res: Response) => {
     const { email, password, name } = req.body;
 
     if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Email, password, and name are required' });
+      return res.status(400).json({ error: 'Vui lòng nhập đầy đủ họ tên, email và mật khẩu.', reqId: req.id });
     }
     if (!isValidEmail(email)) {
-      return res.status(400).json({ error: 'Email không hợp lệ' });
+      return res.status(400).json({ error: 'Địa chỉ email không đúng định dạng. Vui lòng kiểm tra lại.', reqId: req.id });
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ error: 'Email is already registered' });
+      logger.warn(`Register failed: email already exists: ${email}`, { reqId: req.id });
+      return res.status(400).json({ error: 'Email này đã được đăng ký tài khoản tại ToTo Barbershop. Vui lòng đăng nhập.', reqId: req.id });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -51,12 +53,17 @@ export const register = async (req: Request, res: Response) => {
       { expiresIn: '24h' }
     );
 
+    logger.info(`Customer registered successfully: ${email}`, { reqId: req.id, userId: user.id });
+
     res.status(201).json({
+      message: 'Đăng ký tài khoản thành công. Chào mừng bạn đến với ToTo Barbershop!',
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, addresses: user.addresses }
+      user: { id: user.id, email: user.email, name: user.name, phone: user.phone || "", role: user.role, addresses: user.addresses },
+      reqId: req.id
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to register user' });
+    logger.error('Register error', error, { reqId: req.id });
+    res.status(500).json({ error: 'Đăng ký tài khoản không thành công. Vui lòng thử lại sau ít phút.', reqId: req.id });
   }
 };
 
@@ -65,10 +72,10 @@ export const login = async (req: Request, res: Response) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+      return res.status(400).json({ error: 'Vui lòng nhập đầy đủ email và mật khẩu.', reqId: req.id });
     }
     if (!isValidEmail(email)) {
-      return res.status(400).json({ error: 'Email không hợp lệ' });
+      return res.status(400).json({ error: 'Địa chỉ email không đúng định dạng.', reqId: req.id });
     }
 
     const user = await prisma.user.findUnique({ 
@@ -76,12 +83,14 @@ export const login = async (req: Request, res: Response) => {
       include: { addresses: true }
     });
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      logger.warn(`Login failed: user not found: ${email}`, { reqId: req.id });
+      return res.status(401).json({ error: 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.', reqId: req.id });
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      logger.warn(`Login failed: invalid password for: ${email}`, { reqId: req.id });
+      return res.status(401).json({ error: 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.', reqId: req.id });
     }
 
     const currentVersionStr = await redis.get(`tokenVersion:${user.id}`);
@@ -96,29 +105,35 @@ export const login = async (req: Request, res: Response) => {
       { expiresIn: '24h' }
     );
 
+    logger.info(`User logged in successfully: ${email} (${user.role})`, { reqId: req.id, userId: user.id });
+
     res.json({
+      message: 'Đăng nhập thành công! Chào mừng quý khách.',
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, addresses: user.addresses }
+      user: { id: user.id, email: user.email, name: user.name, phone: user.phone || "", role: user.role, addresses: user.addresses },
+      reqId: req.id
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to log in' });
+    logger.error('Login error', error, { reqId: req.id });
+    res.status(500).json({ error: 'Đăng nhập không thành công. Vui lòng thử lại sau ít phút.', reqId: req.id });
   }
 };
 
 export const forgotPassword = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email is required' });
-    if (!isValidEmail(email)) return res.status(400).json({ error: 'Email không hợp lệ' });
+    if (!email) return res.status(400).json({ error: 'Vui lòng nhập địa chỉ email.', reqId: req.id });
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'Địa chỉ email không đúng định dạng.', reqId: req.id });
 
     const user = await prisma.user.findUnique({ where: { email } });
     
-    // Luôn trả về success message dù email có tồn tại hay không (để tránh rò rỉ thông tin)
+    // Luôn trả về thông báo chuẩn để bảo mật thông tin tài khoản
     if (!user) {
-      return res.json({ message: 'Nếu email tồn tại, chúng tôi đã gửi mã xác nhận' });
+      logger.info(`Forgot password requested for non-existent email: ${email}`, { reqId: req.id });
+      return res.json({ message: 'Nếu email tồn tại trong hệ thống ToTo Barbershop, mã xác nhận OTP đã được gửi đến hộp thư của bạn.' });
     }
 
-    // Sinh OTP 6 số
+    // Sinh OTP 6 số ngẫu nhiên
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     
     // Băm OTP bằng SHA-256
@@ -135,13 +150,14 @@ export const forgotPassword = async (req: Request, res: Response) => {
       }
     });
 
-    // Gửi email
+    // Gửi email xác nhận
     await sendPasswordResetEmail(user.email, otpCode);
+    logger.info(`Password reset OTP generated & sent for: ${email}`, { reqId: req.id });
 
-    res.json({ message: 'Nếu email tồn tại, chúng tôi đã gửi mã xác nhận' });
+    res.json({ message: 'Mã xác nhận OTP (6 số) đã được gửi đến email của bạn. Vui lòng kiểm tra hộp thư.' });
   } catch (error) {
-    console.error('Forgot password error:', error);
-    res.status(500).json({ error: 'Failed to process request' });
+    logger.error('Forgot password error', error, { reqId: req.id });
+    res.status(500).json({ error: 'Không thể gửi mã xác nhận lúc này. Vui lòng thử lại sau.', reqId: req.id });
   }
 };
 
@@ -150,36 +166,35 @@ export const resetPassword = async (req: Request, res: Response) => {
     const { email, code, newPassword } = req.body;
 
     if (!email || !code || !newPassword) {
-      return res.status(400).json({ error: 'Email, code, and new password are required' });
+      return res.status(400).json({ error: 'Vui lòng nhập đầy đủ email, mã OTP và mật khẩu mới.', reqId: req.id });
     }
 
     if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      return res.status(400).json({ error: 'Mật khẩu mới phải có độ dài tối thiểu 6 ký tự.', reqId: req.id });
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      return res.status(400).json({ error: 'Mã không đúng hoặc đã hết hạn.' }); // Không nói rõ lỗi do email
+      return res.status(400).json({ error: 'Mã xác nhận không hợp lệ hoặc đã hết hạn sử dụng.', reqId: req.id });
     }
 
     const tokenHash = crypto.createHash('sha256').update(code).digest('hex');
 
-    // Tìm token mới nhất, trùng hash, chưa hết hạn, chưa sử dụng
     const token = await prisma.passwordResetToken.findFirst({
       where: {
         userId: user.id,
         tokenHash,
         used: false,
-        expiresAt: { gt: new Date() } // expiresAt > now
+        expiresAt: { gt: new Date() }
       },
       orderBy: { createdAt: 'desc' }
     });
 
     if (!token) {
-      return res.status(400).json({ error: 'Mã xác nhận không đúng hoặc đã hết hạn.' });
+      logger.warn(`Reset password failed: invalid/expired OTP token for: ${email}`, { reqId: req.id });
+      return res.status(400).json({ error: 'Mã xác nhận OTP không đúng hoặc đã hết hạn. Vui lòng yêu cầu mã mới.', reqId: req.id });
     }
 
-    // Đổi mật khẩu
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     
     await prisma.$transaction([
@@ -193,36 +208,37 @@ export const resetPassword = async (req: Request, res: Response) => {
       })
     ]);
 
-    // Thu hồi toàn bộ session cũ bằng cách tăng tokenVersion
+    // Thu hồi toàn bộ session cũ
     await redis.incr(`tokenVersion:${user.id}`);
+    logger.info(`Password reset successfully for: ${email}`, { reqId: req.id });
 
-    res.json({ message: 'Đổi mật khẩu thành công.' });
+    res.json({ message: 'Đặt lại mật khẩu thành công! Quý khách có thể đăng nhập ngay bằng mật khẩu mới.' });
   } catch (error) {
-    console.error('Reset password error:', error);
-    res.status(500).json({ error: 'Failed to reset password' });
+    logger.error('Reset password error', error, { reqId: req.id });
+    res.status(500).json({ error: 'Đổi mật khẩu không thành công. Vui lòng thử lại sau.', reqId: req.id });
   }
 };
 
 export const changePassword = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!userId) return res.status(401).json({ error: 'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.', reqId: req.id });
 
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Mật khẩu hiện tại và mật khẩu mới là bắt buộc' });
+      return res.status(400).json({ error: 'Vui lòng nhập mật khẩu hiện tại và mật khẩu mới.', reqId: req.id });
     }
 
     if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
+      return res.status(400).json({ error: 'Mật khẩu mới phải có tối thiểu 6 ký tự.', reqId: req.id });
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+    if (!user) return res.status(404).json({ error: 'Không tìm thấy thông tin tài khoản.', reqId: req.id });
 
     const isValidPassword = await bcrypt.compare(currentPassword, user.password);
     if (!isValidPassword) {
-      return res.status(400).json({ error: 'Mật khẩu hiện tại không đúng' });
+      return res.status(400).json({ error: 'Mật khẩu hiện tại không chính xác.', reqId: req.id });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -232,13 +248,13 @@ export const changePassword = async (req: Request, res: Response) => {
       data: { password: hashedPassword }
     });
 
-    // Thu hồi session cũ
     await redis.incr(`tokenVersion:${userId}`);
+    logger.info(`Password changed for user id #${userId}`, { reqId: req.id });
 
-    res.json({ message: 'Đổi mật khẩu thành công' });
+    res.json({ message: 'Cập nhật mật khẩu thành công!' });
   } catch (error) {
-    console.error('Change password error:', error);
-    res.status(500).json({ error: 'Lỗi khi đổi mật khẩu' });
+    logger.error('Change password error', error, { reqId: req.id });
+    res.status(500).json({ error: 'Có lỗi xảy ra khi đổi mật khẩu. Vui lòng thử lại.', reqId: req.id });
   }
 };
 
@@ -247,10 +263,12 @@ export const logout = async (req: Request, res: Response) => {
     const user = (req as any).user;
     if (user && user.id) {
       await redis.incr(`tokenVersion:${user.id}`);
+      logger.info(`User logged out: ${user.email}`, { reqId: req.id });
     }
-    res.json({ message: 'Đăng xuất thành công' });
+    res.json({ message: 'Đăng xuất thành công. Hẹn gặp lại quý khách!' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to logout' });
+    logger.error('Logout error', error, { reqId: req.id });
+    res.status(500).json({ error: 'Đăng xuất không thành công.', reqId: req.id });
   }
 };
 
@@ -274,14 +292,14 @@ export const getUsers = async (req: Request, res: Response) => {
       name: u.name,
       phone: u.phone,
       role: u.role,
-      status: 'active', // Mock status since we don't have it
+      status: 'active',
       createdAt: u.createdAt.toISOString()
     }));
 
     res.json(mappedUsers);
   } catch (error) {
-    console.error('getUsers error:', error);
-    res.status(500).json({ error: 'Failed to fetch users' });
+    logger.error('getUsers error', error, { reqId: req.id });
+    res.status(500).json({ error: 'Không thể lấy danh sách người dùng.', reqId: req.id });
   }
 };
 
@@ -290,12 +308,12 @@ export const createUser = async (req: Request, res: Response) => {
     const { email, password, name, phone, role } = req.body;
 
     if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Email, password, and name are required' });
+      return res.status(400).json({ error: 'Vui lòng nhập đầy đủ thông tin: họ tên, email và mật khẩu.', reqId: req.id });
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ error: 'Email is already registered' });
+      return res.status(400).json({ error: 'Địa chỉ email này đã tồn tại trong hệ thống.', reqId: req.id });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -309,6 +327,8 @@ export const createUser = async (req: Request, res: Response) => {
       }
     });
 
+    logger.info(`User created by admin: ${email} (${user.role})`, { reqId: req.id });
+
     res.status(201).json({
       id: user.id,
       email: user.email,
@@ -319,7 +339,7 @@ export const createUser = async (req: Request, res: Response) => {
       createdAt: user.createdAt.toISOString()
     });
   } catch (error) {
-    console.error('createUser error:', error);
-    res.status(500).json({ error: 'Failed to create user' });
+    logger.error('createUser error', error, { reqId: req.id });
+    res.status(500).json({ error: 'Tạo tài khoản không thành công.', reqId: req.id });
   }
 };

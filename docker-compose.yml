@@ -45,6 +45,8 @@ services:
     command: npm run start
     volumes:
       - uploads_data:/app/public/uploads
+      - .:/app
+      - /app/node_modules
 
   pg-backup:
     image: eeshugerman/postgres-backup-s3:15

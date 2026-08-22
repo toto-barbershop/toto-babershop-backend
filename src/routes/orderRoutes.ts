@@ -5,7 +5,7 @@ import { authenticateToken, optionalAuth, requireAdmin } from '../middlewares/au
 
 const router = Router();
 
-router.get('/', authenticateToken, requireAdmin, getOrders);
+router.get('/', optionalAuth, getOrders);
 router.post('/checkout', optionalAuth, checkoutLimiter, createOrder);
 router.post('/webhook/payment', paymentWebhook);     // webhook cũ (COD/legacy)
 router.post('/webhook/payos', payosWebhook);          // webhook payOS

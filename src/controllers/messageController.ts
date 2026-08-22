@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { prisma } from "../config/db.js";
 import { isValidEmail, isValidPhone } from "../utils/validation.js";
+import { sendContactNotificationEmail } from "../services/emailService.js";
 
 // POST /api/messages - Customer submits a new contact message
 export const submitMessage = async (req: Request, res: Response) => {
@@ -29,6 +30,11 @@ export const submitMessage = async (req: Request, res: Response) => {
         status: "unread",
       },
     });
+
+    // Fire & Forget: Gửi email thông báo cho Admin
+    sendContactNotificationEmail(name, email, phone, subject, message).catch(err =>
+      console.error("Async Contact Email Error:", err)
+    );
 
     res.status(201).json(newMessage);
   } catch (error) {

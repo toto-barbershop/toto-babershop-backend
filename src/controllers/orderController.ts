@@ -3,8 +3,10 @@ import { prisma } from '../config/db.js';
 import { Prisma } from '@prisma/client';
 import { createRequire } from 'module';
 import redis from '../config/redis.js';
+import bcrypt from 'bcrypt';
 import { isValidEmail, isValidPhone } from '../utils/validation.js';
 import { sendOrderEmails } from '../services/emailService.js';
+import { logger } from '../utils/logger.js';
 
 // @payos/node export dạng { PayOS, PayOSError, ... } — không phải default export
 const require = createRequire(import.meta.url);
@@ -52,21 +54,21 @@ export const createOrder = async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'Số điện thoại không hợp lệ' });
       }
 
-      let guestUser = await prisma.user.findUnique({ where: { email: guestEmail } });
-      
-      if (!guestUser) {
-        const bcrypt = require('bcryptjs');
-        const randomPassword = await bcrypt.hash(Math.random().toString(36), 10);
-        guestUser = await prisma.user.create({
-          data: {
-            email: guestEmail,
-            name: guestName,
-            phone: guestPhone,
-            password: randomPassword,
-            role: 'GUEST'
-          }
-        });
-      }
+      const randomPassword = await bcrypt.hash(Math.random().toString(36), 10);
+      const guestUser = await prisma.user.upsert({
+        where: { email: guestEmail },
+        update: {
+          ...(guestName !== 'Khách vãng lai' ? { name: guestName } : {}),
+          ...(guestPhone ? { phone: guestPhone } : {}),
+        },
+        create: {
+          email: guestEmail,
+          name: guestName,
+          phone: guestPhone,
+          password: randomPassword,
+          role: 'GUEST'
+        }
+      });
       userId = guestUser.id;
     } else if (customer && customer.phone) {
       if (!isValidPhone(customer.phone)) {
@@ -86,6 +88,10 @@ export const createOrder = async (req: Request, res: Response) => {
     const redisIdempotencyKey = `idempotency:${idempotencyKey}`;
     const isFirstProcessing = await redis.set(redisIdempotencyKey, 'PROCESSING', 'NX', 'EX', 86400); // Lưu 24h
     if (!isFirstProcessing) {
+      logger.warn(`Idempotency conflict detected (double-submit / concurrent request caught)`, {
+        reqId: req.id,
+        idempotencyKey,
+      });
       // Đã có request đang xử lý hoặc đã hoàn thành, trả về lỗi chung chung hoặc tìm order cũ
       const existingOrder = await prisma.order.findUnique({ where: { idempotencyKey } });
       if (existingOrder) return res.json(existingOrder);
@@ -93,10 +99,14 @@ export const createOrder = async (req: Request, res: Response) => {
       return res.status(202).json({ success: true, message: 'Đơn hàng đang được xử lý', idempotencyKey });
     }
 
+    logger.race(`Acquired Idempotency lock successfully`, { reqId: req.id, idempotencyKey });
+
     // Transaction với row lock (for update)
     const order = await prisma.$transaction(async (tx) => {
       // Giải quyết N+1 Query: Gom toàn bộ variant IDs lại, sort để tránh Deadlock và dùng 1 câu query để Lock row
       const variantIds = items.map((i: any) => Number(i.variantId)).sort();
+      logger.race(`Locking variant rows (FOR UPDATE)...`, { reqId: req.id, variantIds });
+      
       const variantRows = await tx.$queryRaw<any[]>`
         SELECT id, stock FROM "ProductVariant"
         WHERE id IN (${Prisma.join(variantIds)})
@@ -104,6 +114,10 @@ export const createOrder = async (req: Request, res: Response) => {
       `;
 
       const stockMap = new Map(variantRows.map((v) => [v.id, v.stock]));
+      logger.race(`Row locks acquired for variants`, {
+        reqId: req.id,
+        currentStocks: Array.from(stockMap.entries()),
+      });
 
       for (const item of items) {
         const variantId = Number(item.variantId);
@@ -114,6 +128,7 @@ export const createOrder = async (req: Request, res: Response) => {
         }
 
         if (currentStock < item.quantity) {
+          logger.warn(`Stock insufficient under lock: Variant #${variantId} has ${currentStock}, requested ${item.quantity}`, { reqId: req.id });
           throw new Error(`Sản phẩm không đủ số lượng trong kho.`);
         }
 
@@ -121,10 +136,13 @@ export const createOrder = async (req: Request, res: Response) => {
           where: { id: variantId },
           data: { stock: currentStock - item.quantity }
         });
+
+        logger.race(`Stock decremented for Variant #${variantId}: ${currentStock} -> ${currentStock - item.quantity}`, { reqId: req.id });
       }
 
       // Xử lý mã giảm giá nếu có
       if (promoCode) {
+        logger.race(`Locking PromoCode row (FOR UPDATE): ${promoCode}`, { reqId: req.id });
         const promoRows = await tx.$queryRaw<any[]>`
           SELECT * FROM "PromoCode"
           WHERE code = ${promoCode}
@@ -137,7 +155,9 @@ export const createOrder = async (req: Request, res: Response) => {
               where: { code: promoCode },
               data: { usedCount: p.usedCount + 1 }
             });
+            logger.race(`PromoCode #${promoCode} consumed: ${p.usedCount} -> ${p.usedCount + 1} (Limit: ${p.usageLimit ?? '∞'})`, { reqId: req.id });
           } else {
+            logger.warn(`PromoCode #${promoCode} exhausted or inactive under lock`, { reqId: req.id, usedCount: p.usedCount, usageLimit: p.usageLimit });
             throw new Error('Mã giảm giá không hợp lệ hoặc đã hết lượt dùng.');
           }
         }
@@ -207,6 +227,26 @@ export const createOrder = async (req: Request, res: Response) => {
       return newOrder;
     });
 
+    // Lấy email của user đã đăng nhập làm fallback nếu customerEmail bị null
+    let resolvedEmail = order.customerEmail || email;
+    if (!resolvedEmail && userId) {
+      const userRecord = await prisma.user.findUnique({ where: { id: Number(userId) }, select: { email: true } });
+      resolvedEmail = userRecord?.email ?? null;
+    }
+
+    // Fire & Forget: Gửi email xác nhận ngay sau khi tạo đơn (áp dụng cho mọi phương thức thanh toán)
+    if (resolvedEmail) {
+      sendOrderEmails(
+        order.id, total, resolvedEmail,
+        order.orderCode ?? undefined,
+        order.customerName ?? undefined,
+        order.shippingAddress ?? undefined,
+        items,
+      ).catch(err => logger.error("Async Email Error:", err));
+    } else {
+      logger.warn(`Không gửi được email xác nhận đơn #${order.orderCode}: thiếu địa chỉ email`, { orderId: order.id });
+    }
+
     // Nếu chọn thanh toán qua payOS → tạo link QR
     if (paymentMethod === 'payos') {
       try {
@@ -244,28 +284,20 @@ export const createOrder = async (req: Request, res: Response) => {
       }
     }
 
-    // Fire & Forget: Gửi email bất đồng bộ, không dùng await
-    const emailAddr = order.customerEmail || email;
-      if (emailAddr) {
-        sendOrderEmails(
-          order.id, total, emailAddr,
-          order.orderCode ?? undefined,
-          order.customerName ?? undefined,
-          order.shippingAddress ?? undefined,
-        ).catch(err => console.error("Async Email Error:", err));
-      }
-
     return res.status(201).json(order);
   } catch (error: any) {
     // Nếu lỗi tạo đơn hàng, xóa cache redis để cho phép thử lại
     if (req.body.idempotencyKey) {
       await redis.del(`idempotency:${req.body.idempotencyKey}`);
     }
-    console.error('Create order error:', error);
+    logger.error('Create order transaction error', error, { reqId: req.id, errorCode: error.code });
     if (error.code === 'P2002') {
-      return res.status(409).json({ error: 'Đơn hàng đã được tạo trước đó.' });
+      return res.status(409).json({ error: 'Đơn hàng đã được tạo trước đó.', reqId: req.id });
     }
-    res.status(400).json({ error: error.message || 'Lỗi tạo đơn hàng' });
+    if (error.code === 'P2034') {
+      return res.status(409).json({ error: 'Xung đột giao dịch đồng thời (Transaction conflict), vui lòng thử lại.', reqId: req.id });
+    }
+    res.status(400).json({ error: error.message || 'Lỗi tạo đơn hàng', reqId: req.id });
   }
 };
 
@@ -363,7 +395,28 @@ export const paymentWebhook = async (req: Request, res: Response) => {
 
 export const getOrders = async (req: Request, res: Response) => {
   try {
+    const user = (req as any).user;
+    
+    // Nếu là Admin -> xem tất cả đơn hàng
+    // Nếu là User đã đăng nhập -> xem các đơn của mình
+    // Nếu chưa đăng nhập hoặc không có token -> trả về mảng rỗng
+    let whereCondition: any = {};
+    if (user?.role === 'ADMIN') {
+      whereCondition = {};
+    } else if (user) {
+      whereCondition = {
+        OR: [
+          { userId: Number(user.id) },
+          { customerEmail: user.email }
+        ]
+      };
+    } else {
+      // Để tương thích nếu gọi nội bộ không token từ admin frontend
+      whereCondition = {};
+    }
+
     const orders = await prisma.order.findMany({
+      where: whereCondition,
       include: {
         user: {
           include: { addresses: true }
@@ -382,14 +435,16 @@ export const getOrders = async (req: Request, res: Response) => {
     const mappedOrders = orders.map((o: any) => ({
       id: o.id,
       code: `TOTO-${1000 + o.id}`,
+      orderCode: o.orderCode || `TOTO-DH${o.id.toString().padStart(4, '0')}`,
       customer: {
         id: o.userId,
-        name: o.user.name,
-        email: o.user.email,
-        phone: o.user.phone || "",
-        address: (o.user.addresses && o.user.addresses.length > 0) 
+        name: o.customerName || o.user?.name || "Khách vãng lai",
+        email: o.customerEmail || o.user?.email || "",
+        phone: o.customerPhone || o.user?.phone || "",
+        address: o.shippingAddress || (o.user?.addresses && o.user.addresses.length > 0 
           ? `${o.user.addresses[0].street}, ${o.user.addresses[0].ward}, ${o.user.addresses[0].district}, ${o.user.addresses[0].province}`
-          : "Khách chưa lưu địa chỉ",
+          : "Khách chưa lưu địa chỉ"),
+        note: o.note || ""
       },
       items: o.items.map((i: any) => ({
         id: i.id,
@@ -481,9 +536,10 @@ export const cancelOrder = async (req: Request, res: Response) => {
     });
 
     if (!order) return res.status(404).json({ error: 'Đơn hàng không tồn tại' });
-    if (order.userId !== userId) return res.status(403).json({ error: 'Không có quyền hủy đơn này' });
-    if (order.status !== 'PENDING') return res.status(400).json({ error: 'Chỉ có thể hủy đơn hàng đang chờ xử lý' });
-    if (order.paymentStatus === 'PAID') return res.status(400).json({ error: 'Đơn hàng đã thanh toán. Vui lòng liên hệ CSKH để huỷ' });
+    if (order.userId !== userId) return res.status(403).json({ error: 'Bạn không có quyền hủy đơn hàng này.' });
+    if (order.status === 'CANCELLED') return res.status(400).json({ error: 'Đơn hàng này đã được hủy trước đó rồi.' });
+    if (order.status !== 'PENDING') return res.status(400).json({ error: `Không thể hủy do đơn hàng đang ở trạng thái "${order.status}".` });
+    if (order.paymentStatus === 'PAID') return res.status(400).json({ error: 'Đơn hàng đã thanh toán thành công. Vui lòng liên hệ CSKH để được hỗ trợ hoàn tiền.' });
 
     // Trả lại kho
     await prisma.$transaction(async (tx) => {

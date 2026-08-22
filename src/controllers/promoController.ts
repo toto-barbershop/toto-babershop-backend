@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { prisma } from "../config/db.js";
 import redis from "../config/redis.js";
+import { logger } from "../utils/logger.js";
 
 export const getAllPromoCodes = async (req: Request, res: Response) => {
   try {
@@ -9,8 +10,8 @@ export const getAllPromoCodes = async (req: Request, res: Response) => {
     });
     res.json(promos);
   } catch (error) {
-    console.error("Get all promos error:", error);
-    res.status(500).json({ error: "Lỗi máy chủ" });
+    logger.error("Get all promos error", error, { reqId: req.id });
+    res.status(500).json({ error: "Lỗi máy chủ", reqId: req.id });
   }
 };
 
@@ -23,10 +24,11 @@ export const createPromoCode = async (req: Request, res: Response) => {
     const promo = await prisma.promoCode.create({
       data
     });
+    logger.info(`Promo code created: ${promo.code}`, { reqId: req.id, promoId: promo.id });
     res.json(promo);
   } catch (error) {
-    console.error("Create promo error:", error);
-    res.status(500).json({ error: "Lỗi tạo mã giảm giá" });
+    logger.error("Create promo error", error, { reqId: req.id });
+    res.status(500).json({ error: "Lỗi tạo mã giảm giá", reqId: req.id });
   }
 };
 
@@ -43,10 +45,11 @@ export const updatePromoCode = async (req: Request, res: Response) => {
     });
     // Invalidate cache
     await redis.del(`promo:${promo.code.toUpperCase()}`);
+    logger.info(`Promo code updated & cache invalidated: ${promo.code}`, { reqId: req.id });
     res.json(promo);
   } catch (error) {
-    console.error("Update promo error:", error);
-    res.status(500).json({ error: "Lỗi cập nhật mã giảm giá" });
+    logger.error("Update promo error", error, { reqId: req.id });
+    res.status(500).json({ error: "Lỗi cập nhật mã giảm giá", reqId: req.id });
   }
 };
 
@@ -58,10 +61,11 @@ export const deletePromoCode = async (req: Request, res: Response) => {
     });
     // Invalidate cache
     await redis.del(`promo:${promo.code.toUpperCase()}`);
+    logger.info(`Promo code deleted & cache invalidated: ${promo.code}`, { reqId: req.id });
     res.json({ success: true });
   } catch (error) {
-    console.error("Delete promo error:", error);
-    res.status(500).json({ error: "Lỗi xóa mã giảm giá" });
+    logger.error("Delete promo error", error, { reqId: req.id });
+    res.status(500).json({ error: "Lỗi xóa mã giảm giá", reqId: req.id });
   }
 };
 
@@ -70,7 +74,7 @@ export const validatePromoCode = async (req: Request, res: Response) => {
     const { code, subtotal } = req.body;
     
     if (!code || subtotal === undefined) {
-      return res.status(400).json({ error: "Thiếu code hoặc subtotal" });
+      return res.status(400).json({ error: "Thiếu code hoặc subtotal", reqId: req.id });
     }
 
     const cacheKey = `promo:${code.toUpperCase()}`;
@@ -79,29 +83,35 @@ export const validatePromoCode = async (req: Request, res: Response) => {
     const cachedPromo = await redis.get(cacheKey);
     if (cachedPromo) {
       promo = JSON.parse(cachedPromo);
+      logger.race(`Promo code cache HIT: ${code}`, { reqId: req.id });
     } else {
       promo = await prisma.promoCode.findUnique({
         where: { code: code.toUpperCase() }
       });
       if (promo) {
         await redis.set(cacheKey, JSON.stringify(promo), 'EX', 3600); // 1 giờ TTL
+        logger.race(`Promo code cache MISS -> DB read & cached: ${code}`, { reqId: req.id });
       }
     }
 
     if (!promo || !promo.isActive) {
-      return res.status(400).json({ error: "Mã khuyến mãi không hợp lệ hoặc đã bị khóa." });
+      logger.warn(`Promo validate failed: inactive or not found: ${code}`, { reqId: req.id });
+      return res.status(400).json({ error: "Mã khuyến mãi không hợp lệ hoặc đã bị khóa.", reqId: req.id });
     }
 
     if (promo.expiresAt && new Date() > new Date(promo.expiresAt)) {
-      return res.status(400).json({ error: "Mã khuyến mãi đã hết hạn sử dụng." });
+      logger.warn(`Promo validate failed: expired: ${code}`, { reqId: req.id, expiresAt: promo.expiresAt });
+      return res.status(400).json({ error: "Mã khuyến mãi đã hết hạn sử dụng.", reqId: req.id });
     }
 
     if (promo.usageLimit !== null && promo.usedCount >= promo.usageLimit) {
-      return res.status(400).json({ error: "Mã khuyến mãi đã hết lượt sử dụng." });
+      logger.warn(`Promo validate failed: usage limit reached: ${code} (${promo.usedCount}/${promo.usageLimit})`, { reqId: req.id });
+      return res.status(400).json({ error: "Mã khuyến mãi đã hết lượt sử dụng.", reqId: req.id });
     }
 
     if (subtotal < promo.minOrderValue) {
-      return res.status(400).json({ error: `Đơn hàng chưa đạt giá trị tối thiểu ${promo.minOrderValue.toLocaleString("vi-VN")}đ để sử dụng mã này.` });
+      logger.warn(`Promo validate failed: minOrderValue not reached: ${code} (${subtotal} < ${promo.minOrderValue})`, { reqId: req.id });
+      return res.status(400).json({ error: `Đơn hàng chưa đạt giá trị tối thiểu ${promo.minOrderValue.toLocaleString("vi-VN")}đ để sử dụng mã này.`, reqId: req.id });
     }
 
     let discount = 0;
@@ -118,9 +128,10 @@ export const validatePromoCode = async (req: Request, res: Response) => {
       discount = subtotal;
     }
 
-    res.json({ success: true, discount, code: promo.code });
+    logger.race(`Promo validate SUCCESS: ${code} -> discount: ${discount}`, { reqId: req.id, code: promo.code, discount });
+    res.json({ success: true, discount, code: promo.code, reqId: req.id });
   } catch (error) {
-    console.error("Validate promo error:", error);
-    res.status(500).json({ error: "Lỗi máy chủ" });
+    logger.error("Validate promo error", error, { reqId: req.id });
+    res.status(500).json({ error: "Lỗi máy chủ", reqId: req.id });
   }
 };

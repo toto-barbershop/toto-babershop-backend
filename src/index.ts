@@ -25,6 +25,9 @@ import { logger } from './utils/logger.js';
 
 const app = express();
 
+// Trust reverse proxy (Caddy) to get correct client IP from X-Forwarded-For
+app.set('trust proxy', 1);
+
 // Security HTTP Headers
 app.use(helmet());
 

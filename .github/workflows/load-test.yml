@@ -29,6 +29,7 @@ jobs:
       - name: Execute K6 Load Test
         env:
           BASE_URL: ${{ inputs.target_url || secrets.VPS_URL || 'https://160-30-157-229.sslip.io' }}
+          LOAD_TEST_SECRET: ${{ secrets.LOAD_TEST_SECRET }}
         run: |
           echo "🎯 Target URL: $BASE_URL"
-          k6 run --env BASE_URL="$BASE_URL" tests/load-test.js
+          k6 run --env BASE_URL="$BASE_URL" --env LOAD_TEST_SECRET="$LOAD_TEST_SECRET" tests/load-test.js

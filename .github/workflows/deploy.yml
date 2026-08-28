@@ -76,7 +76,7 @@ jobs:
     name: Deploy to VPS
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: SSH and Deploy to VPS
@@ -88,6 +88,6 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           script: |
             cd ~/app
-            git pull origin ${{ github.ref_name }}
+            git pull origin main
             docker compose up -d --build backend
             docker compose exec backend npx prisma db push

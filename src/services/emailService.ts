@@ -1,6 +1,25 @@
 import nodemailer from 'nodemailer';
 import { logger } from '../utils/logger.js';
 import { prisma } from '../config/db.js';
+import { isSafeDeliverableEmail } from '../utils/validation.js';
+
+export interface SendEmailOptions {
+  to: string;
+  subject: string;
+  html: string;
+  replyTo?: string;
+}
+
+export interface SendEmailResult {
+  success: boolean;
+  messageId?: string;
+  simulated?: boolean;
+  error?: string;
+}
+
+export interface EmailProvider {
+  send(options: SendEmailOptions): Promise<SendEmailResult>;
+}
 
 interface ContactInfo {
   businessName: string;
@@ -23,10 +42,10 @@ const getDynamicContactInfo = async (): Promise<ContactInfo> => {
     }, {});
 
     const businessName = settingsMap.business?.name || 'ToTo Barbershop';
-    const address = settingsMap.contact?.address || '123 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh';
-    const phone = settingsMap.contact?.phone || '090 987 6543';
+    const address = settingsMap.contact?.address || '85 Đồng Đen, Phường 12, Quận Tân Bình, TP.HCM';
+    const phone = settingsMap.contact?.phone || '0981 378 179';
     const email = settingsMap.contact?.email || 'totobaberadmin@gmail.com';
-    const hours = settingsMap.contact?.hours || '08:30 - 20:30 (Tất cả các ngày trong tuần)';
+    const hours = settingsMap.contact?.hours || '09:00 – 20:30 (Mở cửa tất cả các ngày trong tuần)';
     const website = process.env.FRONTEND_URL?.split(',')[0]?.trim() || 'https://totobarbershop.vn';
 
     return {
@@ -40,35 +59,13 @@ const getDynamicContactInfo = async (): Promise<ContactInfo> => {
   } catch (error) {
     return {
       businessName: 'ToTo Barbershop',
-      address: '123 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh',
-      phone: '090 987 6543',
+      address: '85 Đồng Đen, Phường 12, Quận Tân Bình, TP.HCM',
+      phone: '0981 378 179',
       email: 'totobaberadmin@gmail.com',
-      hours: '08:30 - 20:30 (Tất cả các ngày trong tuần)',
+      hours: '09:00 – 20:30 (Mở cửa tất cả các ngày trong tuần)',
       website: 'https://totobarbershop.vn',
     };
   }
-};
-
-const getTransporter = () => {
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT || '465', 10);
-  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!user || !pass) {
-    return null;
-  }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: {
-      user,
-      pass,
-    },
-  });
 };
 
 const getFromAddress = () => {
@@ -77,9 +74,7 @@ const getFromAddress = () => {
   return `"${name}" <${email}>`;
 };
 
-// Cấu hình địa chỉ gửi / nhận để tối ưu độ tin cậy SPF/DKIM của Gmail
 const NO_REPLY_ADDRESS = `"${process.env.SMTP_FROM_NAME || 'ToTo Barbershop'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'totobaberadmin@gmail.com'}>`;
-
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
@@ -123,20 +118,123 @@ const getBrandFooterHtml = (info: ContactInfo, showNoReplyNotice: boolean = true
   </div>
 `;
 
+// ============================================================================
+// 1. GmailDevProvider (Nodemailer SMTP cho Môi trường Development & Test)
+// ============================================================================
+export class GmailDevProvider implements EmailProvider {
+  private transporter: nodemailer.Transporter | null = null;
+
+  constructor() {
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const port = parseInt(process.env.SMTP_PORT || '465', 10);
+    const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+
+    if (user && pass) {
+      this.transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: { user, pass },
+      });
+    }
+  }
+
+  async send(options: SendEmailOptions): Promise<SendEmailResult> {
+    if (!this.transporter) {
+      logger.warn('Chưa cấu hình SMTP_USER / SMTP_PASS. Giả lập gửi email (Simulated).');
+      console.log('\n======================================================');
+      console.log('⚠️ [DEV SIMULATED EMAIL] To:', options.to);
+      console.log('Subject:', options.subject);
+      console.log('======================================================\n');
+      return { success: true, simulated: true };
+    }
+
+    try {
+      const info = await this.transporter.sendMail({
+        from: getFromAddress(),
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        replyTo: options.replyTo || NO_REPLY_ADDRESS,
+      });
+      return { success: true, messageId: info.messageId };
+    } catch (error: any) {
+      logger.error(`[GmailDevProvider] Lỗi gửi email tới ${options.to}:`, error);
+      return { success: false, error: error.message || 'Lỗi gửi mail SMTP' };
+    }
+  }
+}
+
+// ============================================================================
+// 2. ResendProvider (Dành cho Môi trường Production sau khi có Domain)
+// ============================================================================
+export class ResendProvider implements EmailProvider {
+  private apiKey: string;
+  private from: string;
+
+  constructor() {
+    this.apiKey = process.env.RESEND_API_KEY || '';
+    this.from = getFromAddress();
+  }
+
+  async send(options: SendEmailOptions): Promise<SendEmailResult> {
+    if (!this.apiKey) {
+      logger.warn('[ResendProvider] Thiếu RESEND_API_KEY. Bỏ qua gửi thực.');
+      return { success: false, error: 'Thiếu RESEND_API_KEY' };
+    }
+
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          from: this.from,
+          to: options.to,
+          subject: options.subject,
+          html: options.html,
+          reply_to: options.replyTo || NO_REPLY_ADDRESS,
+        }),
+      });
+
+      const data: any = await response.json();
+      if (!response.ok) {
+        logger.error('[ResendProvider] Resend API error:', data);
+        return { success: false, error: data.message || 'Lỗi Resend API' };
+      }
+
+      return { success: true, messageId: data.id };
+    } catch (error: any) {
+      logger.error('[ResendProvider] Network error sending via Resend:', error);
+      return { success: false, error: error.message };
+    }
+  }
+}
+
+// ============================================================================
+// 3. Provider Factory Switch
+// ============================================================================
+export const emailProvider: EmailProvider =
+  process.env.EMAIL_PROVIDER === 'resend' && process.env.RESEND_API_KEY
+    ? new ResendProvider()
+    : new GmailDevProvider();
+
+// ============================================================================
+// 4. Các Hàm Nghiệp Vụ Gửi Email
+// ============================================================================
+
 /**
- * 1. Gửi Email Mã OTP Đặt lại mật khẩu (Có No-Reply & Thông tin shop động)
+ * Gửi Email Mã OTP Đặt lại mật khẩu (Có bảo vệ Safe Email)
  */
 export const sendPasswordResetEmail = async (toEmail: string, otpCode: string) => {
-  const transporter = getTransporter();
-
-  if (!transporter) {
-    logger.warn('Chưa cấu hình SMTP_USER / SMTP_PASS trong file .env. Gửi email giả lập.');
-    console.log('\n======================================================');
-    console.log('⚠️ [DEV MODE] EMAIL ĐẶT LẠI MẬT KHẨU TOTO BARBERSHOP ⚠️');
-    console.log('Gửi tới:', toEmail);
-    console.log('MÃ OTP CỦA BẠN LÀ:', otpCode);
-    console.log('======================================================\n');
-    return { success: true, simulated: true };
+  const safeCheck = isSafeDeliverableEmail(toEmail);
+  if (!safeCheck.safe) {
+    logger.warn(`Bỏ qua gửi OTP đặt lại mật khẩu do email không an toàn: ${toEmail} (${safeCheck.reason})`);
+    return { success: false, error: safeCheck.reason };
   }
 
   const contactInfo = await getDynamicContactInfo();
@@ -173,24 +271,15 @@ export const sendPasswordResetEmail = async (toEmail: string, otpCode: string) =
     </div>
   `;
 
-  try {
-    const info = await transporter.sendMail({
-      from: getFromAddress(),
-      replyTo: NO_REPLY_ADDRESS,
-      to: toEmail,
-      subject,
-      html: htmlContent,
-    });
-    logger.info(`Đã gửi email OTP đặt lại mật khẩu tới: ${toEmail}`, { messageId: info.messageId });
-    return { success: true, messageId: info.messageId };
-  } catch (error: any) {
-    logger.error(`Lỗi khi gửi email OTP tới ${toEmail}:`, error);
-    throw new Error('Không thể gửi email xác thực. Vui lòng kiểm tra lại cấu hình SMTP của shop.');
-  }
+  return emailProvider.send({
+    to: toEmail,
+    subject,
+    html: htmlContent,
+  });
 };
 
 /**
- * 2. Gửi Email Xác nhận Đơn hàng (Khách hàng + Admin) với thông tin liên hệ động
+ * Gửi Email Xác nhận Đơn hàng (Khách hàng + Admin) với Safe Email Filter & Non-blocking
  */
 export const sendOrderEmails = async (
   orderId: number,
@@ -206,14 +295,6 @@ export const sendOrderEmails = async (
   const displayAddress = shippingAddress || 'Nhận tại cửa hàng / Theo thông tin đơn';
   const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
 
-  const transporter = getTransporter();
-
-  if (!transporter) {
-    logger.warn('Chưa cấu hình SMTP. Bỏ qua gửi email đơn hàng thực tế (Simulated).');
-    console.log(`[SIMULATED ORDER EMAIL] Đơn hàng #${displayCode} - Tổng: ${formatCurrency(total)} - Khách: ${customerEmail}`);
-    return;
-  }
-
   const contactInfo = await getDynamicContactInfo();
 
   // Danh sách sản phẩm dạng bảng HTML
@@ -227,7 +308,7 @@ export const sendOrderEmails = async (
       `).join('')
     : '';
 
-  // 1. Email cho Khách hàng (Kèm No-Reply và thông tin liên hệ shop động)
+  // 1. Template Email cho Khách hàng
   const customerHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #eaeaea; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
       <div style="background: #101715; padding: 28px; text-align: center;">
@@ -288,7 +369,22 @@ export const sendOrderEmails = async (
     </div>
   `;
 
-  // 2. Email cho Admin
+  // Kiểm tra an toàn trước khi gửi email cho khách
+  const safeCheck = isSafeDeliverableEmail(customerEmail);
+  const sendCustomerPromise = safeCheck.safe
+    ? emailProvider.send({
+        to: customerEmail,
+        subject: `🧾 Xác nhận đơn hàng ${displayCode} - ${contactInfo.businessName}`,
+        html: customerHtml,
+      })
+    : (async () => {
+        logger.warn(
+          `[SafeEmailGuard] Bỏ qua gửi email xác nhận đơn #${displayCode} cho khách (${customerEmail}) vì không đạt chuẩn: ${safeCheck.reason}`
+        );
+        return { success: false, error: safeCheck.reason };
+      })();
+
+  // 2. Template Email cho Admin (Kèm ghi chú nếu email khách bị chặn gửi)
   const adminHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #eaeaea; border-radius: 16px; overflow: hidden;">
       <div style="background: #287565; padding: 24px; text-align: center;">
@@ -317,42 +413,36 @@ export const sendOrderEmails = async (
           </tr>
         </table>
 
+        ${!safeCheck.safe ? `
+          <div style="padding: 12px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; font-size: 13px; color: #92400e; margin-bottom: 16px;">
+            ⚠️ <strong>Lưu ý:</strong> Email của khách (${customerEmail}) không đạt chuẩn an toàn (${safeCheck.reason}). Hệ thống đã tự động chặn gửi mail cho khách để bảo vệ danh tiếng gửi thư của shop. Vui lòng liên hệ khách qua số điện thoại nếu cần.
+          </div>
+        ` : ''}
+
         <p style="color: #6b7280; font-size: 13px; margin: 0;">Vui lòng truy cập bảng điều khiển Admin để xem chi tiết và đóng gói giao hàng.</p>
       </div>
     </div>
   `;
 
+  const sendAdminPromise = adminEmail
+    ? emailProvider.send({
+        to: adminEmail,
+        subject: `🛒 [ĐƠN MỚI] ${displayCode} - ${displayName} (${formatCurrency(total)})`,
+        html: adminHtml,
+      })
+    : Promise.resolve({ success: true, simulated: true });
+
+  // Chạy cả 2 tác vụ ngầm non-blocking
   try {
-    const promises: Promise<any>[] = [
-      transporter.sendMail({
-        from: getFromAddress(),
-        replyTo: NO_REPLY_ADDRESS,
-        to: customerEmail,
-        subject: `🧾 Xác nhận đơn hàng ${displayCode} - ${contactInfo.businessName}`,
-        html: customerHtml,
-      }),
-    ];
-
-    if (adminEmail) {
-      promises.push(
-        transporter.sendMail({
-          from: getFromAddress(),
-          to: adminEmail,
-          subject: `🛒 [ĐƠN MỚI] ${displayCode} - ${displayName} (${formatCurrency(total)})`,
-          html: adminHtml,
-        }),
-      );
-    }
-
-    await Promise.all(promises);
-    logger.info(`Đã gửi email xác nhận đơn hàng #${displayCode} tới ${customerEmail} và Admin`);
+    await Promise.all([sendCustomerPromise, sendAdminPromise]);
+    logger.info(`Đã xử lý gửi email đơn hàng #${displayCode}`);
   } catch (error: any) {
-    logger.error(`Lỗi khi gửi email đơn hàng #${displayCode}:`, error);
+    logger.error(`Lỗi khi xử lý email đơn hàng #${displayCode}:`, error);
   }
 };
 
 /**
- * 3. Gửi Email Thông báo Tin nhắn Liên hệ / Đăng ký Khóa học tới Admin
+ * Gửi Email Thông báo Tin nhắn Liên hệ / Đăng ký Khóa học tới Admin
  */
 export const sendContactNotificationEmail = async (
   name: string,
@@ -362,11 +452,7 @@ export const sendContactNotificationEmail = async (
   message?: string,
 ) => {
   const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
-  const transporter = getTransporter();
-
-  if (!transporter || !adminEmail) {
-    return;
-  }
+  if (!adminEmail) return;
 
   const emailSubject = subject ? `📩 [LIÊN HỆ MỚI] ${subject} - ${name}` : `📩 [LIÊN HỆ MỚI] Tin nhắn từ ${name}`;
   const htmlContent = `
@@ -397,12 +483,11 @@ export const sendContactNotificationEmail = async (
   `;
 
   try {
-    await transporter.sendMail({
-      from: getFromAddress(),
+    await emailProvider.send({
       to: adminEmail,
-      replyTo: `"${name}" <${email}>`, // Admin có thể bấm reply để trả lời thẳng cho khách này
       subject: emailSubject,
       html: htmlContent,
+      replyTo: `"${name}" <${email}>`,
     });
     logger.info(`Đã gửi email thông báo liên hệ tới Admin (${adminEmail})`);
   } catch (error) {

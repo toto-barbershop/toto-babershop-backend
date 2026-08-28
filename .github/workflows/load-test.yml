@@ -1,0 +1,34 @@
+name: K6 Performance & Load Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target API Base URL (vd: https://160-30-157-229.sslip.io)'
+        required: false
+        default: 'https://160-30-157-229.sslip.io'
+        type: string
+
+jobs:
+  k6-load-test:
+    name: Run K6 Load Test on Cloud
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69 || true
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Execute K6 Load Test
+        env:
+          BASE_URL: ${{ inputs.target_url || secrets.VPS_URL || 'https://160-30-157-229.sslip.io' }}
+        run: |
+          echo "🎯 Target URL: $BASE_URL"
+          k6 run --env BASE_URL="$BASE_URL" tests/load-test.js

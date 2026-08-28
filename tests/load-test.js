@@ -23,17 +23,23 @@ export const options = {
 };
 
 export default function () {
-  // Lấy BASE_URL từ biến môi trường hoặc fallback về sslip.io HTTPS
+  // Lấy BASE_URL và LOAD_TEST_SECRET từ biến môi trường
   const BASE_URL = __ENV.BASE_URL || 'https://160-30-157-229.sslip.io';
+  const LOAD_TEST_SECRET = __ENV.LOAD_TEST_SECRET || '';
 
-  const params = {
-    headers: {
-      'Accept': 'application/json',
-      'User-Agent': 'k6-load-test/1.0',
-    },
+  const headers = {
+    'Accept': 'application/json',
+    'User-Agent': 'k6-load-test/1.0',
   };
 
-  // 1. Khách hàng tải danh mục sản phẩm (Products)
+  // Nếu có truyền LOAD_TEST_SECRET thì thêm header bảo mật để bypass rate limiter an toàn
+  if (LOAD_TEST_SECRET) {
+    headers['X-Load-Test-Token'] = LOAD_TEST_SECRET;
+  }
+
+  const params = { headers };
+
+  // 1. Khách hàng tải danh mục sản phẩm (Products - Truy vấn Database PostgreSQL)
   const resProducts = http.get(`${BASE_URL}/api/products`, params);
   productsLatency.add(resProducts.timings.duration);
   const successProducts = check(resProducts, {
@@ -43,7 +49,7 @@ export default function () {
 
   sleep(0.5); // Nghỉ 0.5s giữa các thao tác như người dùng thật
 
-  // 2. Khách hàng xem danh sách dịch vụ (Services)
+  // 2. Khách hàng xem danh sách dịch vụ (Services - Truy vấn Database)
   const resServices = http.get(`${BASE_URL}/api/services`, params);
   servicesLatency.add(resServices.timings.duration);
   const successServices = check(resServices, {

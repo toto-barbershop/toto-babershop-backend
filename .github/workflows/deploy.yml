@@ -58,6 +58,17 @@ jobs:
       - name: Check TypeScript Syntax
         run: npx tsc --noEmit
 
+      - name: Run Dependency Security Audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Run Trivy Vulnerability & Secret Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          severity: 'CRITICAL,HIGH'
+          format: 'table'
+          exit-code: '0' # Cảnh báo log không làm đứt đoạn deploy trừ khi có lỗi nghiêm trọng
+
       - name: Run Vitest Unit Tests
         env:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/shop_test?schema=public"

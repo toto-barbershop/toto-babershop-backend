@@ -367,19 +367,21 @@ async function main() {
   }
 
   console.log('\n🌱 Seeding users...');
-  const passwordHash = await bcrypt.hash('123456', 10);
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@toto.com';
+  const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || '123456';
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
   
   const users = [
     {
-      email: 'admin@toto.com',
+      email: adminEmail,
       password: passwordHash,
       name: 'Toto Admin',
-      phone: '0901234567',
+      phone: '0981378179',
       role: 'ADMIN',
     },
     {
       email: 'customer@toto.com',
-      password: passwordHash,
+      password: await bcrypt.hash('123456', 10),
       name: 'Nguyen Van Khach',
       phone: '0909876543',
       role: 'CUSTOMER',

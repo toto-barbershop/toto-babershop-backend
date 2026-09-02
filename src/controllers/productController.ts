@@ -82,7 +82,7 @@ export const createProduct = async (req: Request, res: Response) => {
           color: v.options?.color || v.color,
           options: v.options,
           price: v.price ?? finalBasePrice,
-          stock: v.stock ?? 0,
+          stock: Math.max(0, parseInt(v.stock) || 0),
           sku: v.sku
         }))
       };
@@ -131,10 +131,12 @@ export const updateProduct = async (req: Request, res: Response) => {
                 notIn: variants
                   .map((v: any) => (typeof v.id === 'number' ? v.id : parseInt(v.id)))
                   .filter((id: number) => !isNaN(id))
-              }
+              },
+              orderItems: { none: {} }
             },
             upsert: variants.map((v: any) => {
               const numId = typeof v.id === 'number' ? v.id : parseInt(v.id);
+              const safeStock = Math.max(0, parseInt(v.stock) || 0);
               return {
                 where: { id: !isNaN(numId) ? numId : -1 },
                 update: {
@@ -143,7 +145,7 @@ export const updateProduct = async (req: Request, res: Response) => {
                   color: v.options?.color || v.color,
                   options: v.options,
                   price: v.price ?? finalBasePrice ?? 0,
-                  stock: v.stock ?? 0,
+                  stock: safeStock,
                   sku: v.sku
                 },
                 create: {
@@ -152,7 +154,7 @@ export const updateProduct = async (req: Request, res: Response) => {
                   color: v.options?.color || v.color,
                   options: v.options,
                   price: v.price ?? finalBasePrice ?? 0,
-                  stock: v.stock ?? 0,
+                  stock: safeStock,
                   sku: v.sku
                 }
               };

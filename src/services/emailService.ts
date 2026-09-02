@@ -577,7 +577,13 @@ export const sendOrderCancelledEmail = async (
       `).join('')
     : '';
 
-  const subject = `❌ [ToTo Barbershop] Xác nhận hủy đơn hàng #${displayCode}`;
+  const isTimeout = displayReason.includes('15 phút') || displayReason.toLowerCase().includes('quá thời gian') || displayReason.toLowerCase().includes('hết hạn');
+  const subject = isTimeout 
+    ? `⏰ [ToTo Barbershop] Đơn hàng #${displayCode} đã tự động hủy (Quá hạn thanh toán 15 phút)`
+    : `❌ [ToTo Barbershop] Thông báo hủy đơn hàng #${displayCode}`;
+
+  const frontendUrl = (process.env.FRONTEND_URL?.split(',')[0] || 'https://totobarbershop.com').trim().replace(/\/+$/, '');
+
   const htmlContent = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #eaeaea; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
       <div style="background: #101715; padding: 28px; text-align: center;">
@@ -589,12 +595,14 @@ export const sendOrderCancelledEmail = async (
         <h2 style="color: #101715; margin: 0 0 12px 0; font-size: 20px; font-weight: 700;">Đơn hàng #${displayCode} đã được hủy</h2>
         <p style="color: #4b5563; font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;">
           Xin chào <strong>${displayName}</strong>,<br>
-          Hệ thống xin thông báo đơn hàng <strong>#${displayCode}</strong> của quý khách đã được hủy thành công. Số lượng sản phẩm trong đơn đã được hoàn trả lại kho hàng.
+          ${isTimeout 
+            ? `Đơn hàng <strong>#${displayCode}</strong> của quý khách đã tự động được hệ thống hủy do <strong>quá thời gian thanh toán (15 phút)</strong> kể từ lúc tạo đơn. Toàn bộ số lượng sản phẩm trong đơn đã được tự động hoàn lại kho hàng.`
+            : `Hệ thống xin thông báo đơn hàng <strong>#${displayCode}</strong> của quý khách đã được hủy. Số lượng sản phẩm trong đơn đã được hoàn trả lại kho hàng.`}
         </p>
 
         <div style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
           <p style="margin: 0; font-size: 13px; color: #991b1b; line-height: 1.5;">
-            📌 <strong>Lý do hủy:</strong> ${displayReason}
+            📌 <strong>Lý do:</strong> ${displayReason}
           </p>
         </div>
 
@@ -614,7 +622,7 @@ export const sendOrderCancelledEmail = async (
           </table>
         ` : ''}
 
-        <div style="border-top: 2px solid #e5e7eb; padding-top: 16px; margin-bottom: 20px;">
+        <div style="border-top: 2px solid #e5e7eb; padding-top: 16px; margin-bottom: 24px;">
           <table style="width: 100%;">
             <tr>
               <td style="font-size: 15px; color: #6b7280;">Tổng tiền đơn hàng:</td>
@@ -623,8 +631,14 @@ export const sendOrderCancelledEmail = async (
           </table>
         </div>
 
+        <div style="text-align: center; margin-bottom: 24px;">
+          <a href="${frontendUrl}/shop" style="display: inline-block; background: #101715; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+            Khám phá & Đặt hàng lại
+          </a>
+        </div>
+
         <div style="background: #f8faf9; border-radius: 12px; padding: 16px; margin-bottom: 12px; font-size: 13px; color: #4b5563; line-height: 1.6;">
-          💡 <em>Nếu quý khách có nhu cầu đặt lại đơn hàng hoặc cần hỗ trợ hoàn tiền (với đơn đã thanh toán), xin vui lòng liên hệ trực tiếp hotline hoặc ghé thăm website của chúng tôi.</em>
+          💡 <em>Nếu quý khách có bất kỳ câu hỏi nào hoặc cần hỗ trợ đặt hàng, xin vui lòng liên hệ trực tiếp hotline hoặc phản hồi lại email này.</em>
         </div>
       </div>
 

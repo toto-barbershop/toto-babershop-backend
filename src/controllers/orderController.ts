@@ -283,9 +283,10 @@ export const createOrder = async (req: Request, res: Response) => {
           description: `TOTO DH${order.id}`,
           cancelUrl: `${process.env.FRONTEND_URL?.split(',')[0]?.trim()}/checkout?cancelled=1`,
           returnUrl: `${process.env.FRONTEND_URL?.split(',')[0]?.trim()}/order-success?code=${order.id}`,
-          buyerName: user?.name || 'Khách hàng',
-          buyerEmail: user?.email,
-          buyerPhone: user?.phone || undefined,
+          buyerName: user?.name || order.customerName || 'Khách hàng',
+          buyerEmail: user?.email || order.customerEmail || undefined,
+          buyerPhone: user?.phone || order.customerPhone || undefined,
+          expiredAt: Math.floor(Date.now() / 1000) + 15 * 60,
         });
 
         // Lưu orderCode vào DB để webhook sau nhận dạng được
@@ -776,6 +777,7 @@ export const retryPayment = async (req: Request, res: Response) => {
       buyerName: order.customerName || order.user?.name || 'Khách hàng',
       buyerEmail: order.customerEmail || order.user?.email,
       buyerPhone: order.customerPhone || order.user?.phone || undefined,
+      expiredAt: Math.floor(Date.now() / 1000) + 15 * 60,
     });
 
     // Cập nhật lại payosOrderCode mới

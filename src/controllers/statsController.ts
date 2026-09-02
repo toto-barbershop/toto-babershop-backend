@@ -17,8 +17,14 @@ const PAYMENT_METHOD_MAP: Record<string, string> = {
 
 export const getStats = async (req: Request, res: Response) => {
   try {
+    // Chỉ tính doanh thu từ các đơn đã hoàn thành hoặc đã thanh toán, bỏ qua đơn hủy/hoàn tiền
     const orders = await prisma.order.findMany();
-    const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
+    const completedOrders = orders.filter(o => {
+      const st = o.status.toUpperCase();
+      const ps = (o.paymentStatus || '').toUpperCase();
+      return (st === 'COMPLETED' || ps === 'PAID') && st !== 'CANCELLED' && ps !== 'REFUNDED';
+    });
+    const totalRevenue = completedOrders.reduce((sum, order) => sum + order.total, 0);
     const newOrders = orders.length;
     
     const users = await prisma.user.findMany({ where: { role: 'CUSTOMER' } });
@@ -47,50 +53,77 @@ export const exportOrders = async (req: Request, res: Response) => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Báo cáo Đơn hàng');
 
-    // Khởi tạo cột
+    // Khởi tạo cột — bổ sung cột Trạng thái thanh toán
     worksheet.columns = [
-      { header: 'Mã Đơn',         key: 'orderCode',   width: 20 },
-      { header: 'Khách hàng',     key: 'customer',    width: 25 },
-      { header: 'Số Điện Thoại',  key: 'phone',       width: 15 },
-      { header: 'Email',          key: 'email',       width: 28 },
-      { header: 'Địa chỉ giao',   key: 'address',     width: 40 },
-      { header: 'Ghi chú',        key: 'note',        width: 25 },
-      { header: 'Trạng thái',     key: 'status',      width: 15 },
-      { header: 'Phương thức TT', key: 'payment',     width: 22 },
-      { header: 'Ngày đặt',       key: 'date',        width: 18 },
-      { header: 'Tổng tiền',      key: 'total',       width: 15 },
+      { header: 'Mã Đơn',             key: 'orderCode',      width: 20 },
+      { header: 'Khách hàng',         key: 'customer',       width: 25 },
+      { header: 'Số Điện Thoại',      key: 'phone',          width: 15 },
+      { header: 'Email',              key: 'email',          width: 28 },
+      { header: 'Địa chỉ giao',       key: 'address',        width: 40 },
+      { header: 'Ghi chú',            key: 'note',           width: 25 },
+      { header: 'Trạng thái đơn',     key: 'status',         width: 18 },
+      { header: 'TT Thanh toán',      key: 'paymentStatus',  width: 16 },
+      { header: 'Phương thức TT',     key: 'payment',        width: 22 },
+      { header: 'Ngày đặt',           key: 'date',           width: 18 },
+      { header: 'Tổng tiền',          key: 'total',          width: 15 },
     ];
 
     // Format Header
     const headerRow = worksheet.getRow(1);
     headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD71920' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1a5c4f' } };
     headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     headerRow.height = 24;
 
     // Format Cột Tổng tiền (Tiền tệ VNĐ)
     worksheet.getColumn('total').numFmt = '#,##0" ₫"';
 
+    const PAYMENT_STATUS_MAP: Record<string, string> = {
+      PAID: 'Đã thanh toán',
+      UNPAID: 'Chưa thanh toán',
+      REFUNDED: 'Đã hoàn tiền',
+    };
+
     // Thêm dữ liệu — ưu tiên snapshot trên order, fallback về User profile
     orders.forEach((order) => {
+      const statusUpper = order.status.toUpperCase();
+      const psUpper = (order.paymentStatus || '').toUpperCase();
+
       const row = worksheet.addRow({
-        orderCode:  order.orderCode,
-        customer:   order.customerName   || order.user?.name  || 'Khách vãng lai',
-        phone:      order.customerPhone  || order.user?.phone || 'N/A',
-        email:      order.customerEmail  || order.user?.email || 'N/A',
-        address:    order.shippingAddress || 'Chưa cập nhật',
-        note:       order.note           || '',
-        status:     ORDER_STATUS_MAP[order.status] || order.status,
-        payment:    PAYMENT_METHOD_MAP[order.paymentMethod.toLowerCase()] || order.paymentMethod,
-        date:       order.createdAt.toLocaleDateString('vi-VN'),
-        total:      order.total,
+        orderCode:     order.orderCode,
+        customer:      order.customerName   || order.user?.name  || 'Khách vãng lai',
+        phone:         order.customerPhone  || order.user?.phone || 'N/A',
+        email:         order.customerEmail  || order.user?.email || 'N/A',
+        address:       order.shippingAddress || 'Chưa cập nhật',
+        note:          order.note           || '',
+        status:        ORDER_STATUS_MAP[statusUpper] || order.status,
+        paymentStatus: PAYMENT_STATUS_MAP[psUpper] || order.paymentStatus || 'Chưa thanh toán',
+        payment:       PAYMENT_METHOD_MAP[order.paymentMethod.toLowerCase()] || order.paymentMethod,
+        date:          order.createdAt.toLocaleDateString('vi-VN'),
+        total:         order.total,
       });
 
       // Căn giữa các ô trạng thái và phương thức
-      row.getCell('status').alignment  = { horizontal: 'center' };
-      row.getCell('payment').alignment = { horizontal: 'center' };
-      row.getCell('date').alignment    = { horizontal: 'center' };
-      row.getCell('total').alignment   = { horizontal: 'right' };
+      row.getCell('status').alignment        = { horizontal: 'center' };
+      row.getCell('paymentStatus').alignment = { horizontal: 'center' };
+      row.getCell('payment').alignment       = { horizontal: 'center' };
+      row.getCell('date').alignment          = { horizontal: 'center' };
+      row.getCell('total').alignment         = { horizontal: 'right' };
+
+      // Tô màu nền theo trạng thái đơn để dễ nhận diện khi xem báo cáo
+      if (statusUpper === 'CANCELLED') {
+        // Đơn hủy — nền đỏ nhạt
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE8E8' } };
+          cell.font = { color: { argb: 'FF9B1C1C' } };
+        });
+      } else if (psUpper === 'REFUNDED') {
+        // Đã hoàn tiền — nền tím nhạt
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3E8FF' } };
+          cell.font = { color: { argb: 'FF6B21A8' } };
+        });
+      }
     });
 
     // Thêm border cho tất cả ô dữ liệu
@@ -105,6 +138,11 @@ export const exportOrders = async (req: Request, res: Response) => {
         };
       });
     });
+
+    // Thêm row ghi chú chú giải màu sắc ở cuối
+    worksheet.addRow([]);
+    const legendRow1 = worksheet.addRow(['📌 Chú giải màu:', 'Nền đỏ = Đơn đã hủy', '', 'Nền tím = Đơn đã hoàn tiền', '', 'Màu trắng = Đơn hợp lệ']);
+    legendRow1.font = { italic: true, size: 10, color: { argb: 'FF555555' } };
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=bao-cao-don-hang.xlsx');

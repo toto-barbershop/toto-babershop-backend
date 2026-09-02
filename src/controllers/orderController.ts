@@ -5,7 +5,7 @@ import { createRequire } from 'module';
 import redis from '../config/redis.js';
 import bcrypt from 'bcrypt';
 import { isValidEmail, isValidPhone } from '../utils/validation.js';
-import { sendOrderEmails } from '../services/emailService.js';
+import { sendOrderEmails, sendOrderCancelledEmail } from '../services/emailService.js';
 import { logger } from '../utils/logger.js';
 import { pushToUser } from '../services/sseManager.js';
 
@@ -28,6 +28,20 @@ const generateOrderCode = (): string => {
     + String(now.getDate()).padStart(2, '0');
   const randPart = Math.random().toString(36).toUpperCase().slice(2, 6);
   return `TTB-${datePart}-${randPart}`;
+};
+
+// Helper chuẩn hóa danh sách sản phẩm hiển thị trong email (Lấy đúng tên sản phẩm & phân loại)
+export const formatOrderItemsForEmail = (orderItems: any[]) => {
+  return (orderItems || []).map((i: any) => {
+    const productName = i.product?.name || i.product?.title || i.title || i.name || 'Sản phẩm';
+    const variantParts = [i.variant?.size, i.variant?.color, i.variant?.name].filter(Boolean);
+    const variantInfo = variantParts.length > 0 ? ` (${variantParts.join(' - ')})` : (i.variantName ? ` (${i.variantName})` : '');
+    return {
+      title: `${productName}${variantInfo}`,
+      quantity: i.quantity,
+      price: i.price,
+    };
+  });
 };
 
 
@@ -228,6 +242,9 @@ export const createOrder = async (req: Request, res: Response) => {
       return newOrder;
     });
 
+    // Xóa cache sản phẩm để đồng bộ số lượng tồn kho (stock) ngay lập tức
+    await redis.del('cache:products').catch(() => {});
+
     // Lấy email của user đã đăng nhập làm fallback nếu customerEmail bị null
     let resolvedEmail = order.customerEmail || email;
     if (!resolvedEmail && userId) {
@@ -235,17 +252,22 @@ export const createOrder = async (req: Request, res: Response) => {
       resolvedEmail = userRecord?.email ?? null;
     }
 
-    // Fire & Forget: Gửi email xác nhận ngay sau khi tạo đơn (áp dụng cho mọi phương thức thanh toán)
-    if (resolvedEmail) {
+    // Chỉ gửi email tiếp nhận đơn ngay lúc tạo nếu chọn phương thức COD (Thanh toán khi nhận hàng)
+    // Đối với PayOS / Chuyển khoản: Chỉ gửi email khi Webhook xác nhận thanh toán thành công
+    if (resolvedEmail && paymentMethod === 'cod') {
+      const fullOrderForEmail = await prisma.order.findUnique({
+        where: { id: order.id },
+        include: { items: { include: { product: true, variant: true } } }
+      });
+      const emailItems = formatOrderItemsForEmail(fullOrderForEmail?.items || items);
       sendOrderEmails(
         order.id, total, resolvedEmail,
         order.orderCode ?? undefined,
         order.customerName ?? undefined,
         order.shippingAddress ?? undefined,
-        items,
-      ).catch(err => logger.error("Async Email Error:", err));
-    } else {
-      logger.warn(`Không gửi được email xác nhận đơn #${order.orderCode}: thiếu địa chỉ email`, { orderId: order.id });
+        emailItems,
+        { paymentMethod: 'cod', paymentStatus: 'PENDING', orderStatus: 'PENDING' }
+      ).catch(err => logger.error("Async COD Order Email Error:", err));
     }
 
     // Nếu chọn thanh toán qua payOS → tạo link QR
@@ -323,7 +345,8 @@ export const payosWebhook = async (req: Request, res: Response) => {
 
     // Tìm order theo payosOrderCode
     const order = await prisma.order.findFirst({
-      where: { payosOrderCode: BigInt(orderCode) }
+      where: { payosOrderCode: BigInt(orderCode) },
+      include: { items: { include: { product: true, variant: true } }, user: true }
     });
 
     if (!order) {
@@ -356,6 +379,41 @@ export const payosWebhook = async (req: Request, res: Response) => {
     });
 
     console.log(`✅ payOS webhook: Order #${order.id} đã thanh toán thành công`);
+
+    // Gửi email xác nhận thanh toán thành công cho khách hàng
+    const customerEmail = order.customerEmail || order.user?.email;
+    const customerName = order.customerName || order.user?.name || undefined;
+    const mappedItems = formatOrderItemsForEmail(order.items);
+
+    if (customerEmail) {
+      sendOrderEmails(
+        order.id,
+        order.total,
+        customerEmail,
+        order.orderCode || undefined,
+        customerName,
+        order.shippingAddress || undefined,
+        mappedItems,
+        {
+          paymentMethod: 'payos',
+          paymentStatus: 'PAID',
+          transactionId: String(orderCode),
+          orderStatus: 'PROCESSING'
+        }
+      ).catch(err => logger.error("Async PayOS Success Email Error:", err));
+    }
+
+    // Push SSE realtime update đến client của khách hàng
+    if (order.userId) {
+      pushToUser(order.userId, 'order_updated', {
+        id: order.id,
+        orderCode: order.orderCode,
+        status: 'processing',
+        paymentStatus: 'paid',
+        updatedAt: new Date(),
+      });
+    }
+
     res.status(200).json({ message: 'OK' });
   } catch (error) {
     console.error('payOS webhook error:', error);
@@ -363,7 +421,7 @@ export const payosWebhook = async (req: Request, res: Response) => {
   }
 };
 
-// Giữ lại webhook cũ (legacy) nếu dùng COD
+// Giữ lại webhook cũ (legacy) nếu dùng bên thứ ba
 export const paymentWebhook = async (req: Request, res: Response) => {
   try {
     const { orderId, transactionId, status } = req.body;
@@ -371,6 +429,13 @@ export const paymentWebhook = async (req: Request, res: Response) => {
     if (status !== 'SUCCESS') {
       return res.status(200).send('OK');
     }
+
+    const order = await prisma.order.findUnique({
+      where: { id: Number(orderId) },
+      include: { items: { include: { product: true, variant: true } }, user: true }
+    });
+
+    if (!order) return res.status(404).json({ error: 'Order not found' });
 
     await prisma.$transaction(async (tx) => {
       const orderRows = await tx.$queryRaw<any[]>`
@@ -383,9 +448,32 @@ export const paymentWebhook = async (req: Request, res: Response) => {
 
       await tx.order.update({
         where: { id: Number(orderId) },
-        data: { paymentStatus: 'PAID', transactionId }
+        data: { paymentStatus: 'PAID', status: 'PROCESSING', transactionId }
       });
     });
+
+    // Gửi email xác nhận thanh toán thành công
+    const customerEmail = order.customerEmail || order.user?.email;
+    const customerName = order.customerName || order.user?.name || undefined;
+    const mappedItems = formatOrderItemsForEmail(order.items);
+
+    if (customerEmail) {
+      sendOrderEmails(
+        order.id,
+        order.total,
+        customerEmail,
+        order.orderCode || undefined,
+        customerName,
+        order.shippingAddress || undefined,
+        mappedItems,
+        {
+          paymentMethod: order.paymentMethod,
+          paymentStatus: 'PAID',
+          transactionId: String(transactionId),
+          orderStatus: 'PROCESSING'
+        }
+      ).catch(err => logger.error("Async Payment Webhook Success Email Error:", err));
+    }
 
     res.status(200).send('OK');
   } catch (error) {
@@ -507,9 +595,37 @@ export const getOrderStatus = async (req: Request, res: Response) => {
 export const updateOrderStatus = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { status, paymentStatus } = req.body;
+    const { status, paymentStatus, cancelReason } = req.body;
     
-    // Yêu cầu quyền admin (giả sử có checkRole admin middleware, ở đây update trực tiếp)
+    const existingOrder = await prisma.order.findUnique({
+      where: { id: Number(id) },
+      include: { items: { include: { product: true, variant: true } }, user: true }
+    });
+
+    if (!existingOrder) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+
+    // Nếu chuyển sang trạng thái CANCELLED và đơn trước đó chưa hủy, hoàn lại kho
+    if (status === 'CANCELLED' && existingOrder.status !== 'CANCELLED') {
+      await prisma.$transaction(async (tx) => {
+        for (const item of existingOrder.items) {
+          if (item.variantId) {
+            const variantRows = await tx.$queryRaw<any[]>`
+              SELECT stock FROM "ProductVariant"
+              WHERE id = ${item.variantId}
+              FOR UPDATE
+            `;
+            if (variantRows && variantRows.length > 0) {
+              await tx.productVariant.update({
+                where: { id: item.variantId },
+                data: { stock: variantRows[0].stock + item.quantity }
+              });
+            }
+          }
+        }
+      });
+      await redis.del('cache:products').catch(() => {});
+    }
+
     const order = await prisma.order.update({
       where: { id: Number(id) },
       data: {
@@ -517,6 +633,25 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         ...(paymentStatus && { paymentStatus })
       }
     });
+
+    // Nếu đơn hàng bị hủy, gửi email thông báo cho khách hàng
+    if (status === 'CANCELLED' && existingOrder.status !== 'CANCELLED') {
+      const customerEmail = existingOrder.customerEmail || existingOrder.user?.email;
+      const customerName = existingOrder.customerName || existingOrder.user?.name || undefined;
+      const mappedItems = formatOrderItemsForEmail(existingOrder.items);
+
+      if (customerEmail) {
+        sendOrderCancelledEmail(
+          order.id,
+          order.total,
+          customerEmail,
+          order.orderCode || undefined,
+          customerName,
+          cancelReason || 'Đơn hàng đã được Quản trị viên hủy theo yêu cầu hoặc do sự cố phát sinh.',
+          mappedItems
+        ).catch(err => console.error("Lỗi gửi email hủy đơn từ Admin:", err));
+      }
+    }
 
     // Push SSE realtime update đến client của khách hàng sở hữu đơn hàng này
     if (order.userId) {
@@ -545,7 +680,7 @@ export const cancelOrder = async (req: Request, res: Response) => {
 
     const order = await prisma.order.findUnique({
       where: { id: Number(id) },
-      include: { items: true }
+      include: { items: { include: { product: true, variant: true } }, user: true }
     });
 
     if (!order) return res.status(404).json({ error: 'Đơn hàng không tồn tại' });
@@ -578,9 +713,89 @@ export const cancelOrder = async (req: Request, res: Response) => {
       });
     });
 
+    await redis.del('cache:products').catch(() => {});
+
+    // Gửi email thông báo hủy đơn hàng tới khách hàng
+    const customerEmail = order.customerEmail || order.user?.email;
+    const customerName = order.customerName || order.user?.name || undefined;
+    const mappedItems = formatOrderItemsForEmail(order.items);
+
+    if (customerEmail) {
+      sendOrderCancelledEmail(
+        order.id,
+        order.total,
+        customerEmail,
+        order.orderCode || undefined,
+        customerName,
+        req.body?.reason || 'Quý khách đã thực hiện hủy đơn hàng trực tuyến trên hệ thống.',
+        mappedItems
+      ).catch(err => console.error("Lỗi gửi email hủy đơn hàng:", err));
+    }
+
     res.json({ message: 'Đã hủy đơn hàng thành công' });
   } catch (error) {
     console.error('Cancel order error:', error);
     res.status(500).json({ error: 'Lỗi hủy đơn hàng' });
+  }
+};
+
+export const retryPayment = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user?.id;
+
+    const order = await prisma.order.findUnique({
+      where: { id: Number(id) },
+      include: { items: { include: { product: true } }, user: true }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Đơn hàng không tồn tại' });
+    }
+
+    if (userId && order.userId && order.userId !== userId && (req as any).user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Bạn không có quyền thanh toán đơn hàng này' });
+    }
+
+    if (order.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'Đơn hàng đã bị hủy, không thể thanh toán lại. Vui lòng đặt đơn hàng mới.' });
+    }
+
+    if (order.paymentStatus === 'PAID') {
+      return res.status(400).json({ error: 'Đơn hàng này đã được thanh toán thành công trước đó rồi.' });
+    }
+
+    // Tạo link thanh toán PayOS mới
+    const payosOrderCode = Number(Date.now().toString().slice(-8));
+    const paymentData = await payos.paymentRequests.create({
+      orderCode: payosOrderCode,
+      amount: order.total,
+      description: `TOTO DH${order.id}`,
+      cancelUrl: `${process.env.FRONTEND_URL?.split(',')[0]?.trim()}/checkout?cancelled=1`,
+      returnUrl: `${process.env.FRONTEND_URL?.split(',')[0]?.trim()}/order-success?code=${order.id}`,
+      buyerName: order.customerName || order.user?.name || 'Khách hàng',
+      buyerEmail: order.customerEmail || order.user?.email,
+      buyerPhone: order.customerPhone || order.user?.phone || undefined,
+    });
+
+    // Cập nhật lại payosOrderCode mới
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        payosOrderCode: BigInt(payosOrderCode),
+        paymentMethod: 'payos',
+      }
+    });
+
+    return res.json({
+      orderId: order.id,
+      orderCode: order.orderCode,
+      payosOrderCode,
+      checkoutUrl: paymentData.checkoutUrl,
+      qrCode: paymentData.qrCode,
+    });
+  } catch (error: any) {
+    logger.error('Retry payment error:', error);
+    res.status(500).json({ error: error.message || 'Lỗi tạo lại link thanh toán PayOS' });
   }
 };

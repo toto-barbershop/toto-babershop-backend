@@ -61,6 +61,17 @@ export const checkAndCancelExpiredOrders = async () => {
               note: order.note ? `${order.note} | [Hệ thống tự động hủy do hết hạn thanh toán 15 phút]` : '[Hệ thống tự động hủy do hết hạn thanh toán 15 phút]',
             },
           });
+
+          // 3. Ghi audit log lịch sử đơn hàng
+          await tx.orderStatusHistory.create({
+            data: {
+              orderId: order.id,
+              oldStatus: 'PENDING',
+              newStatus: 'CANCELLED',
+              changedBy: 'system-scheduler',
+              note: `Hệ thống tự động hủy do quá hạn thời gian thanh toán (${TIMEOUT_MINUTES} phút)`,
+            }
+          });
         });
 
         logger.info(`[OrderScheduler] Đã tự động hủy đơn #${order.orderCode || order.id} do quá hạn thanh toán`);

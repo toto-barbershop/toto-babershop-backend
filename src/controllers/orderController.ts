@@ -381,6 +381,17 @@ export const payosWebhook = async (req: Request, res: Response) => {
 
     console.log(`✅ payOS webhook: Order #${order.id} đã thanh toán thành công`);
 
+    // Ghi audit log lịch sử đơn hàng
+    await prisma.orderStatusHistory.create({
+      data: {
+        orderId: order.id,
+        oldStatus: order.status.toUpperCase(),
+        newStatus: 'PROCESSING',
+        changedBy: 'payos-webhook',
+        note: `Khách hàng thanh toán thành công ${order.total}đ qua PayOS (Mã GD: ${orderCode})`,
+      }
+    }).catch(err => console.error('Lỗi ghi audit log PayOS webhook:', err));
+
     // Gửi email xác nhận thanh toán thành công cho khách hàng
     const customerEmail = order.customerEmail || order.user?.email;
     const customerName = order.customerName || order.user?.name || undefined;
@@ -593,6 +604,14 @@ export const getOrderStatus = async (req: Request, res: Response) => {
   }
 };
 
+export const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
+  PENDING: ['PROCESSING', 'SHIPPED', 'CANCELLED'],
+  PROCESSING: ['SHIPPED', 'COMPLETED', 'CANCELLED'],
+  SHIPPED: ['COMPLETED', 'CANCELLED'],
+  COMPLETED: [], // Trạng thái cuối, không thể thay đổi
+  CANCELLED: [], // Trạng thái cuối, không thể thay đổi
+};
+
 export const updateOrderStatus = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -605,8 +624,32 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     if (!existingOrder) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
 
-    // Nếu chuyển sang trạng thái CANCELLED và đơn trước đó chưa hủy, hoàn lại kho
-    if (status === 'CANCELLED' && existingOrder.status !== 'CANCELLED') {
+    const currentStatus = (existingOrder.status || 'PENDING').toUpperCase();
+
+    // 1. Kiểm tra State Machine nếu có yêu cầu đổi status
+    if (status) {
+      const targetStatus = status.toUpperCase();
+
+      if (targetStatus !== currentStatus) {
+        // Kiểm tra xem đơn hàng đã ở trạng thái kết thúc (Terminal) chưa
+        if (currentStatus === 'COMPLETED' || currentStatus === 'CANCELLED') {
+          const statusText = currentStatus === 'COMPLETED' ? 'Hoàn thành' : 'Đã hủy';
+          return res.status(422).json({
+            error: `Đơn hàng đã ở trạng thái "${statusText}" (kết thúc), không thể thay đổi trạng thái nữa.`
+          });
+        }
+
+        const validNext = VALID_STATUS_TRANSITIONS[currentStatus] || [];
+        if (!validNext.includes(targetStatus)) {
+          return res.status(422).json({
+            error: `Không thể chuyển trạng thái từ "${currentStatus}" sang "${targetStatus}". Các trạng thái hợp lệ tiếp theo: ${validNext.join(', ') || 'Không có'}.`
+          });
+        }
+      }
+    }
+
+    // 2. Nếu chuyển sang trạng thái CANCELLED và đơn trước đó chưa hủy, hoàn lại kho
+    if (status && status.toUpperCase() === 'CANCELLED' && currentStatus !== 'CANCELLED') {
       await prisma.$transaction(async (tx) => {
         for (const item of existingOrder.items) {
           if (item.variantId) {
@@ -630,13 +673,27 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     const order = await prisma.order.update({
       where: { id: Number(id) },
       data: {
-        ...(status && { status }),
-        ...(paymentStatus && { paymentStatus })
+        ...(status && { status: status.toUpperCase() }),
+        ...(paymentStatus && { paymentStatus: paymentStatus.toUpperCase() })
       }
     });
 
+    // 3. Ghi Audit Log vào OrderStatusHistory
+    const changedBy = (req as any).user?.email || (req as any).user?.name || 'admin';
+    if (status && status.toUpperCase() !== currentStatus) {
+      await prisma.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          oldStatus: currentStatus,
+          newStatus: status.toUpperCase(),
+          changedBy: String(changedBy),
+          note: cancelReason || (status.toUpperCase() === 'CANCELLED' ? 'Admin hủy đơn' : `Chuyển trạng thái sang ${status.toUpperCase()}`),
+        }
+      }).catch(err => console.error('Lỗi ghi audit log order status:', err));
+    }
+
     // Nếu đơn hàng bị hủy, gửi email thông báo cho khách hàng
-    if (status === 'CANCELLED' && existingOrder.status !== 'CANCELLED') {
+    if (status && status.toUpperCase() === 'CANCELLED' && currentStatus !== 'CANCELLED') {
       const customerEmail = existingOrder.customerEmail || existingOrder.user?.email;
       const customerName = existingOrder.customerName || existingOrder.user?.name || undefined;
       const mappedItems = formatOrderItemsForEmail(existingOrder.items);
@@ -669,6 +726,20 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Update order status error:', error);
     res.status(500).json({ error: 'Lỗi cập nhật đơn hàng' });
+  }
+};
+
+export const getOrderHistory = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const history = await prisma.orderStatusHistory.findMany({
+      where: { orderId: Number(id) },
+      orderBy: { changedAt: 'desc' }
+    });
+    res.json(history);
+  } catch (error) {
+    console.error('Get order history error:', error);
+    res.status(500).json({ error: 'Lỗi lấy lịch sử trạng thái đơn hàng' });
   }
 };
 
@@ -732,6 +803,17 @@ export const cancelOrder = async (req: Request, res: Response) => {
         mappedItems
       ).catch(err => console.error("Lỗi gửi email hủy đơn hàng:", err));
     }
+
+    // Ghi audit log lịch sử đơn hàng
+    await prisma.orderStatusHistory.create({
+      data: {
+        orderId: order.id,
+        oldStatus: order.status.toUpperCase(),
+        newStatus: 'CANCELLED',
+        changedBy: customerEmail || `User#${userId}`,
+        note: req.body?.reason || 'Khách hàng tự hủy đơn hàng trực tuyến',
+      }
+    }).catch(err => console.error('Lỗi ghi audit log cancelOrder:', err));
 
     res.json({ message: 'Đã hủy đơn hàng thành công' });
   } catch (error) {

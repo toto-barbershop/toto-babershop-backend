@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getOrders, createOrder, paymentWebhook, payosWebhook, updateOrderStatus, cancelOrder, getOrderStatus, retryPayment } from '../controllers/orderController.js';
+import { getOrders, createOrder, paymentWebhook, payosWebhook, updateOrderStatus, cancelOrder, getOrderStatus, retryPayment, getOrderHistory } from '../controllers/orderController.js';
 import { streamOrders } from '../controllers/sseController.js';
 import { checkoutLimiter } from '../middlewares/rateLimitMiddleware.js';
 import { authenticateToken, optionalAuth, requireAdmin } from '../middlewares/authMiddleware.js';
@@ -12,6 +12,7 @@ router.post('/checkout', optionalAuth, checkoutLimiter, createOrder);
 router.post('/webhook/payment', paymentWebhook);     // webhook cũ (COD/legacy)
 router.post('/webhook/payos', payosWebhook);          // webhook payOS
 router.get('/:id/status', getOrderStatus);
+router.get('/:id/history', authenticateToken, requireAdmin, getOrderHistory);
 router.post('/:id/retry-payment', optionalAuth, retryPayment);
 router.put('/:id/status', authenticateToken, requireAdmin, updateOrderStatus);
 router.put('/:id/cancel', authenticateToken, cancelOrder);

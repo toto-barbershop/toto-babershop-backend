@@ -101,4 +101,5 @@ jobs:
             cd ~/app
             git pull origin main
             docker compose up -d --build backend
+            docker compose up -d pg-backup
             docker compose exec backend npx prisma db push

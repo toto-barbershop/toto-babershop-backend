@@ -20,7 +20,8 @@ export interface AuthRequest extends Request {
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  // SSE (EventSource) không thể gửi header, nên cho phép token qua query param
+  const token = (authHeader && authHeader.split(' ')[1]) || (req.query.token as string | undefined);
 
   if (!token) {
     return res.status(401).json({ error: 'Access token is required' });

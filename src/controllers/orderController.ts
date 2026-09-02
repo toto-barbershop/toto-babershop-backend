@@ -7,6 +7,7 @@ import bcrypt from 'bcrypt';
 import { isValidEmail, isValidPhone } from '../utils/validation.js';
 import { sendOrderEmails } from '../services/emailService.js';
 import { logger } from '../utils/logger.js';
+import { pushToUser } from '../services/sseManager.js';
 
 // @payos/node export dạng { PayOS, PayOSError, ... } — không phải default export
 const require = createRequire(import.meta.url);
@@ -516,6 +517,18 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         ...(paymentStatus && { paymentStatus })
       }
     });
+
+    // Push SSE realtime update đến client của khách hàng sở hữu đơn hàng này
+    if (order.userId) {
+      pushToUser(order.userId, 'order_updated', {
+        id: order.id,
+        orderCode: order.orderCode,
+        status: order.status.toLowerCase(),
+        paymentStatus: order.paymentStatus.toLowerCase(),
+        updatedAt: order.updatedAt,
+      });
+    }
+
     res.json(order);
   } catch (error) {
     console.error('Update order status error:', error);

@@ -22,6 +22,7 @@ import { fileURLToPath } from 'url';
 import { globalLimiter } from './middlewares/rateLimitMiddleware.js';
 import { requestLoggerMiddleware } from './middlewares/requestLoggerMiddleware.js';
 import { logger } from './utils/logger.js';
+import { startOrderScheduler } from './services/orderScheduler.js';
 
 const app = express();
 
@@ -97,5 +98,6 @@ const PORT = process.env.PORT || 5000;
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   app.listen(PORT, () => {
     logger.info(`🔒 Server is running securely on port ${PORT}`);
+    startOrderScheduler();
   });
 }

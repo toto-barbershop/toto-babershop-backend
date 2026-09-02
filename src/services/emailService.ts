@@ -289,11 +289,19 @@ export const sendOrderEmails = async (
   customerName?: string,
   shippingAddress?: string,
   items?: Array<{ title?: string; name?: string; quantity: number; price: number }>,
+  options?: {
+    paymentMethod?: string;
+    paymentStatus?: 'PAID' | 'PENDING' | 'REFUNDED' | string;
+    transactionId?: string;
+    orderStatus?: string;
+  }
 ) => {
   const displayCode = orderCode || `TTB-${orderId}`;
   const displayName = customerName || 'Quý khách';
   const displayAddress = shippingAddress || 'Nhận tại cửa hàng / Theo thông tin đơn';
   const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+  const isPaid = options?.paymentStatus === 'PAID';
+  const paymentMethod = options?.paymentMethod || 'cod';
 
   const contactInfo = await getDynamicContactInfo();
 
@@ -309,24 +317,54 @@ export const sendOrderEmails = async (
     : '';
 
   // 1. Template Email cho Khách hàng
+  const customerSubject = isPaid
+    ? `✅ [ToTo Barbershop] Xác nhận đơn hàng & Thanh toán thành công #${displayCode}`
+    : `📦 [ToTo Barbershop] Tiếp nhận đơn hàng #${displayCode} (Thanh toán khi nhận hàng)`;
+
+  const paymentBadgeText = isPaid
+    ? 'THANH TOÁN THÀNH CÔNG'
+    : 'TIẾP NHẬN ĐƠN HÀNG (COD)';
+
+  const paymentStatusHtml = isPaid
+    ? `<span style="color: #059669; font-weight: 700;">ĐÃ THANH TOÁN THÀNH CÔNG</span>${options?.transactionId ? `<br><span style="font-size: 12px; color: #6b7280; font-family: monospace;">Mã GD: ${options.transactionId}</span>` : ''}`
+    : `<span style="color: #d97706; font-weight: 700;">CHƯA THANH TOÁN (Thu tiền khi nhận hàng)</span>`;
+
+  const paymentMethodText = paymentMethod === 'payos'
+    ? 'Chuyển khoản QR (PayOS)'
+    : paymentMethod === 'cod'
+    ? 'Thanh toán khi nhận hàng (COD)'
+    : paymentMethod;
+
+  const salutationText = isPaid
+    ? `ToTo Barbershop đã nhận được thanh toán của quý khách cho đơn hàng <strong>#${displayCode}</strong>. Chúng tôi đang tiến hành đóng gói và sẽ bàn giao cho đơn vị vận chuyển sớm nhất!`
+    : `Đơn hàng <strong>#${displayCode}</strong> của quý khách đã được tiếp nhận. Quý khách vui lòng chuẩn bị số tiền <strong>${formatCurrency(total)}</strong> để thanh toán cho nhân viên giao hàng (Shipper) khi nhận hàng.`;
+
   const customerHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #eaeaea; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
       <div style="background: #101715; padding: 28px; text-align: center;">
         <h1 style="color: #ffffff; margin: 0; font-size: 24px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800;">${contactInfo.businessName}</h1>
-        <p style="color: #287565; margin: 6px 0 0 0; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; font-weight: 600;">Đặt hàng thành công</p>
+        <p style="color: ${isPaid ? '#10b981' : '#f59e0b'}; margin: 6px 0 0 0; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; font-weight: 700;">${paymentBadgeText}</p>
       </div>
 
       <div style="padding: 32px 28px 12px 28px;">
         <h2 style="color: #101715; margin: 0 0 12px 0; font-size: 20px; font-weight: 700;">Cảm ơn ${displayName} đã mua sắm!</h2>
         <p style="color: #4b5563; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">
-          Đơn hàng của quý khách đã được tiếp nhận thành công. Chúng tôi sẽ nhanh chóng chuẩn bị và liên hệ giao hàng sớm nhất.
+          ${salutationText}
         </p>
 
         <div style="background: #f8faf9; border-radius: 12px; padding: 20px; margin-bottom: 24px; border: 1px solid #e5e7eb;">
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
-              <td style="padding: 6px 0; color: #6b7280; font-size: 14px;">Mã đơn hàng:</td>
+              <td style="padding: 6px 0; color: #6b7280; font-size: 14px; width: 140px;">Mã đơn hàng:</td>
               <td style="padding: 6px 0; font-weight: 700; text-align: right; color: #287565; font-family: monospace; font-size: 16px;">${displayCode}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #6b7280; font-size: 14px;">Phương thức:</td>
+              <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #101715; font-size: 14px;">${paymentMethodText}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #6b7280; font-size: 14px;">Trạng thái TT:</td>
+              <td style="padding: 6px 0; text-align: right; font-size: 14px;">${paymentStatusHtml}</td>
             </tr>
             <tr>
               <td style="padding: 6px 0; color: #6b7280; font-size: 14px;">Người nhận:</td>
@@ -374,30 +412,38 @@ export const sendOrderEmails = async (
   const sendCustomerPromise = safeCheck.safe
     ? emailProvider.send({
         to: customerEmail,
-        subject: `🧾 Xác nhận đơn hàng ${displayCode} - ${contactInfo.businessName}`,
+        subject: customerSubject,
         html: customerHtml,
       })
     : (async () => {
         logger.warn(
-          `[SafeEmailGuard] Bỏ qua gửi email xác nhận đơn #${displayCode} cho khách (${customerEmail}) vì không đạt chuẩn: ${safeCheck.reason}`
+          `[SafeEmailGuard] Bỏ qua gửi email đơn #${displayCode} cho khách (${customerEmail}) vì không đạt chuẩn: ${safeCheck.reason}`
         );
         return { success: false, error: safeCheck.reason };
       })();
 
   // 2. Template Email cho Admin (Kèm ghi chú nếu email khách bị chặn gửi)
+  const adminSubject = isPaid
+    ? `💰 [ĐÃ THANH TOÁN] Đơn hàng #${displayCode} - ${displayName} (${formatCurrency(total)})`
+    : `🛒 [ĐƠN MỚI COD] #${displayCode} - ${displayName} (${formatCurrency(total)})`;
+
   const adminHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #eaeaea; border-radius: 16px; overflow: hidden;">
-      <div style="background: #287565; padding: 24px; text-align: center;">
-        <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 800; text-transform: uppercase;">🛒 Đơn Hàng Mới: ${displayCode}</h1>
+      <div style="background: ${isPaid ? '#059669' : '#1e293b'}; padding: 24px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 800; text-transform: uppercase;">${isPaid ? '💰 ĐÃ THANH TOÁN' : '🛒 ĐƠN HÀNG COD MỚI'}: ${displayCode}</h1>
       </div>
 
       <div style="padding: 28px;">
-        <p style="color: #101715; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">Hệ thống vừa ghi nhận một đơn hàng mới từ website:</p>
+        <p style="color: #101715; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">${isPaid ? 'Đơn hàng vừa được thanh toán thành công qua PayOS:' : 'Hệ thống vừa ghi nhận một đơn hàng COD mới từ website:'}</p>
         
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
           <tr>
-            <td style="padding: 8px 0; color: #6b7280; font-size: 14px; width: 130px;">Mã đơn:</td>
+            <td style="padding: 8px 0; color: #6b7280; font-size: 14px; width: 140px;">Mã đơn:</td>
             <td style="padding: 8px 0; font-weight: 700; color: #101715;">${displayCode}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Phương thức:</td>
+            <td style="padding: 8px 0; font-weight: 600; color: #101715;">${paymentMethodText} (${isPaid ? 'Đã thanh toán' : 'Chưa thanh toán'})</td>
           </tr>
           <tr>
             <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Khách hàng:</td>
@@ -419,7 +465,7 @@ export const sendOrderEmails = async (
           </div>
         ` : ''}
 
-        <p style="color: #6b7280; font-size: 13px; margin: 0;">Vui lòng truy cập bảng điều khiển Admin để xem chi tiết và đóng gói giao hàng.</p>
+        <p style="color: #6b7280; font-size: 13px; margin: 0;">Vui lòng truy cập bảng điều khiển Admin để xem chi tiết và xử lý đơn hàng.</p>
       </div>
     </div>
   `;
@@ -427,7 +473,7 @@ export const sendOrderEmails = async (
   const sendAdminPromise = adminEmail
     ? emailProvider.send({
         to: adminEmail,
-        subject: `🛒 [ĐƠN MỚI] ${displayCode} - ${displayName} (${formatCurrency(total)})`,
+        subject: adminSubject,
         html: adminHtml,
       })
     : Promise.resolve({ success: true, simulated: true });
@@ -435,7 +481,7 @@ export const sendOrderEmails = async (
   // Chạy cả 2 tác vụ ngầm non-blocking
   try {
     await Promise.all([sendCustomerPromise, sendAdminPromise]);
-    logger.info(`Đã xử lý gửi email đơn hàng #${displayCode}`);
+    logger.info(`Đã xử lý gửi email đơn hàng #${displayCode} (Paid: ${isPaid})`);
   } catch (error: any) {
     logger.error(`Lỗi khi xử lý email đơn hàng #${displayCode}:`, error);
   }
@@ -492,5 +538,110 @@ export const sendContactNotificationEmail = async (
     logger.info(`Đã gửi email thông báo liên hệ tới Admin (${adminEmail})`);
   } catch (error) {
     logger.error('Lỗi khi gửi email thông báo liên hệ tới Admin:', error);
+  }
+};
+
+/**
+ * Gửi Email Thông báo Hủy đơn hàng (Tới Khách hàng) với Safe Email Filter
+ */
+export const sendOrderCancelledEmail = async (
+  orderId: number,
+  total: number,
+  customerEmail: string,
+  orderCode?: string,
+  customerName?: string,
+  cancelReason?: string,
+  items?: Array<{ title?: string; name?: string; quantity: number; price: number }>,
+) => {
+  if (!customerEmail) return { success: false, error: 'Chưa có email khách hàng' };
+
+  const safeCheck = isSafeDeliverableEmail(customerEmail);
+  if (!safeCheck.safe) {
+    logger.warn(`Bỏ qua gửi email hủy đơn hàng do email không an toàn: ${customerEmail} (${safeCheck.reason})`);
+    return { success: false, error: safeCheck.reason };
+  }
+
+  const displayCode = orderCode || `TTB-${orderId}`;
+  const displayName = customerName || 'Quý khách';
+  const displayReason = cancelReason || 'Theo yêu cầu của khách hàng hoặc chính sách xử lý đơn hàng.';
+  const contactInfo = await getDynamicContactInfo();
+
+  // Danh sách sản phẩm dạng bảng HTML
+  const itemsHtml = items && items.length > 0
+    ? items.map(item => `
+        <tr>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; font-size: 14px;">${item.title || item.name || 'Sản phẩm'}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center; font-size: 14px;">x${item.quantity}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; font-size: 14px; font-weight: 600;">${formatCurrency(item.price * item.quantity)}</td>
+        </tr>
+      `).join('')
+    : '';
+
+  const subject = `❌ [ToTo Barbershop] Xác nhận hủy đơn hàng #${displayCode}`;
+  const htmlContent = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #eaeaea; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
+      <div style="background: #101715; padding: 28px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 24px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800;">${contactInfo.businessName}</h1>
+        <p style="color: #ef4444; margin: 6px 0 0 0; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; font-weight: 600;">Thông báo hủy đơn hàng</p>
+      </div>
+
+      <div style="padding: 32px 28px 12px 28px;">
+        <h2 style="color: #101715; margin: 0 0 12px 0; font-size: 20px; font-weight: 700;">Đơn hàng #${displayCode} đã được hủy</h2>
+        <p style="color: #4b5563; font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;">
+          Xin chào <strong>${displayName}</strong>,<br>
+          Hệ thống xin thông báo đơn hàng <strong>#${displayCode}</strong> của quý khách đã được hủy thành công. Số lượng sản phẩm trong đơn đã được hoàn trả lại kho hàng.
+        </p>
+
+        <div style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+          <p style="margin: 0; font-size: 13px; color: #991b1b; line-height: 1.5;">
+            📌 <strong>Lý do hủy:</strong> ${displayReason}
+          </p>
+        </div>
+
+        ${itemsHtml ? `
+          <h3 style="color: #101715; font-size: 16px; margin: 0 0 12px 0; font-weight: 700;">Chi tiết sản phẩm</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <thead>
+              <tr style="background: #f3f4f6;">
+                <th style="padding: 8px 10px; text-align: left; font-size: 13px; color: #4b5563;">Sản phẩm</th>
+                <th style="padding: 8px 10px; text-align: center; font-size: 13px; color: #4b5563;">SL</th>
+                <th style="padding: 8px 10px; text-align: right; font-size: 13px; color: #4b5563;">Giá</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+        ` : ''}
+
+        <div style="border-top: 2px solid #e5e7eb; padding-top: 16px; margin-bottom: 20px;">
+          <table style="width: 100%;">
+            <tr>
+              <td style="font-size: 15px; color: #6b7280;">Tổng tiền đơn hàng:</td>
+              <td style="font-size: 18px; font-weight: 700; color: #101715; text-align: right;">${formatCurrency(total)}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="background: #f8faf9; border-radius: 12px; padding: 16px; margin-bottom: 12px; font-size: 13px; color: #4b5563; line-height: 1.6;">
+          💡 <em>Nếu quý khách có nhu cầu đặt lại đơn hàng hoặc cần hỗ trợ hoàn tiền (với đơn đã thanh toán), xin vui lòng liên hệ trực tiếp hotline hoặc ghé thăm website của chúng tôi.</em>
+        </div>
+      </div>
+
+      ${getBrandFooterHtml(contactInfo, true)}
+    </div>
+  `;
+
+  try {
+    const result = await emailProvider.send({
+      to: customerEmail,
+      subject,
+      html: htmlContent,
+    });
+    logger.info(`Đã gửi email thông báo hủy đơn hàng #${displayCode} tới ${customerEmail}`);
+    return result;
+  } catch (err) {
+    logger.error(`Lỗi gửi email hủy đơn hàng #${displayCode}:`, err);
+    return { success: false, error: 'Lỗi gửi mail' };
   }
 };

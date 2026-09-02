@@ -343,3 +343,99 @@ export const createUser = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Tạo tài khoản không thành công.', reqId: req.id });
   }
 };
+
+export const updateUser = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const { name, phone, role, password } = req.body;
+
+    if (!id || isNaN(id)) {
+      return res.status(400).json({ error: 'ID người dùng không hợp lệ.', reqId: req.id });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng.', reqId: req.id });
+    }
+
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (role !== undefined) updateData.role = role;
+
+    if (password && typeof password === 'string' && password.trim().length >= 6) {
+      updateData.password = await bcrypt.hash(password.trim(), 10);
+      await redis.incr(`tokenVersion:${id}`);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        role: true,
+        createdAt: true,
+      }
+    });
+
+    logger.info(`User updated by admin: id #${id} (${updatedUser.email})`, { reqId: req.id });
+
+    res.json({
+      ...updatedUser,
+      status: 'active',
+      createdAt: updatedUser.createdAt.toISOString()
+    });
+  } catch (error) {
+    logger.error('updateUser error', error, { reqId: req.id });
+    res.status(500).json({ error: 'Cập nhật tài khoản không thành công.', reqId: req.id });
+  }
+};
+
+export const deleteUser = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const currentAdminId = (req as any).user?.id;
+
+    if (!id || isNaN(id)) {
+      return res.status(400).json({ error: 'ID người dùng không hợp lệ.', reqId: req.id });
+    }
+
+    if (id === currentAdminId) {
+      return res.status(400).json({ error: 'Không thể tự xóa tài khoản quản trị đang đăng nhập.', reqId: req.id });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { _count: { select: { orders: true } } }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng.', reqId: req.id });
+    }
+
+    // Xóa các dữ liệu phụ trợ trước
+    await prisma.passwordResetToken.deleteMany({ where: { userId: id } });
+    await prisma.address.deleteMany({ where: { userId: id } });
+
+    // Xóa đơn hàng nếu có
+    if (user._count.orders > 0) {
+      const orders = await prisma.order.findMany({ where: { userId: id }, select: { id: true } });
+      const orderIds = orders.map(o => o.id);
+      await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
+      await prisma.order.deleteMany({ where: { userId: id } });
+    }
+
+    await prisma.user.delete({ where: { id } });
+    await redis.del(`tokenVersion:${id}`);
+
+    logger.info(`User deleted by admin: id #${id} (${user.email})`, { reqId: req.id });
+    res.json({ message: 'Xóa tài khoản thành công.' });
+  } catch (error) {
+    logger.error('deleteUser error', error, { reqId: req.id });
+    res.status(500).json({ error: 'Xóa tài khoản không thành công.', reqId: req.id });
+  }
+};
+

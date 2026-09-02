@@ -1,0 +1,28 @@
+name: Database Backup (Manual & Scheduled)
+
+on:
+  schedule:
+    - cron: '0 1 * * 1'  # 08:00 Thứ 2 hàng tuần (UTC+7)
+  workflow_dispatch:      # Cho phép bấm nút Backup thủ công trên GitHub
+
+jobs:
+  backup:
+    name: Backup PostgreSQL on VPS to R2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH and Trigger Database Backup
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            cd ~/app
+            echo "🚀 Đang khởi động tiến trình backup database..."
+            docker compose exec -T pg-backup sh -c "sh /backup.sh" || {
+              echo "⚠️ Thử chạy pg_dump trực tiếp từ container db..."
+              docker compose exec -T db pg_dump -U postgres totodb | gzip > ~/backup_$(date +%Y%m%d_%H%M%S).sql.gz
+            }
+            echo "✅ Backup hoàn tất!"

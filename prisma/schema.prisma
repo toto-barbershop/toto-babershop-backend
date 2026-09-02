@@ -97,6 +97,18 @@ model Order {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
   items          OrderItem[]
+  statusHistory  OrderStatusHistory[]
+}
+
+model OrderStatusHistory {
+  id         Int      @id @default(autoincrement())
+  orderId    Int
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  oldStatus  String
+  newStatus  String
+  changedBy  String   @default("admin")
+  note       String?
+  changedAt  DateTime @default(now())
 }
 
 model OrderItem {

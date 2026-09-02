@@ -14,7 +14,8 @@ const s3 = new S3Client({
 async function run() {
   try {
     const data = await s3.send(new ListObjectsV2Command({ Bucket: process.env.R2_BUCKET_NAME }));
-    console.log("✅ Kết nối R2 thành công! Bucket đã tồn tại và bạn có quyền truy cập.");
+    console.log("✅ Kết nối R2 thành công! Tổng số items:", data.Contents?.length);
+    data.Contents?.forEach(c => console.log(`- ${c.Key} (${c.Size} bytes)`));
   } catch (err) {
     console.error("❌ Kết nối thất bại:", err);
   }

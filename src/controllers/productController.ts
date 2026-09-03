@@ -103,6 +103,7 @@ export const createProduct = async (req: Request, res: Response) => {
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const productId = parseInt(id as string);
     const { name, title, description, price, basePrice, image, images, category, type, collection, status, featured, slug, variants } = req.body;
     
     // Support both frontend structures (old structure with price/image, new structure with basePrice/images)
@@ -110,9 +111,53 @@ export const updateProduct = async (req: Request, res: Response) => {
     const productSlug = slug || (finalName ? finalName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : undefined);
     const finalBasePrice = typeof basePrice !== 'undefined' ? basePrice : (typeof price === 'number' ? price : parseInt(price) || undefined);
     const finalImages = images && images.length > 0 ? images : (image ? [image] : undefined);
+
+    // Xử lý các variant cũ bị gỡ bỏ khỏi sản phẩm
+    if (variants && Array.isArray(variants)) {
+      const keepVariantIds = variants
+        .map((v: any) => (typeof v.id === 'number' ? v.id : parseInt(v.id)))
+        .filter((vId: number) => !isNaN(vId) && vId > 0);
+
+      // Tìm các variant cũ không còn nằm trong danh sách cập nhật
+      const oldVariants = await prisma.productVariant.findMany({
+        where: {
+          productId,
+          id: { notIn: keepVariantIds }
+        },
+        select: {
+          id: true,
+          _count: {
+            select: { orderItems: true }
+          }
+        }
+      });
+
+      // Chỉ xóa các variant chưa từng phát sinh đơn hàng (tránh lỗi Foreign Key Constraint)
+      const variantIdsToDelete = oldVariants
+        .filter(v => v._count.orderItems === 0)
+        .map(v => v.id);
+
+      if (variantIdsToDelete.length > 0) {
+        await prisma.productVariant.deleteMany({
+          where: { id: { in: variantIdsToDelete } }
+        });
+      }
+
+      // Với các variant đã có trong đơn hàng lịch sử, không thể xóa cứng -> đưa stock về 0
+      const variantIdsToArchive = oldVariants
+        .filter(v => v._count.orderItems > 0)
+        .map(v => v.id);
+
+      if (variantIdsToArchive.length > 0) {
+        await prisma.productVariant.updateMany({
+          where: { id: { in: variantIdsToArchive } },
+          data: { stock: 0 }
+        });
+      }
+    }
     
     const product = await prisma.product.update({
-      where: { id: parseInt(id as string) },
+      where: { id: productId },
       data: {
         ...(finalName && { name: finalName }),
         ...(productSlug && { slug: productSlug }),
@@ -124,21 +169,13 @@ export const updateProduct = async (req: Request, res: Response) => {
         ...(type && !collection && { collection: type }),
         ...(status && { status }),
         ...(typeof featured !== 'undefined' && { featured }),
-        ...(variants && {
+        ...(variants && Array.isArray(variants) && {
           variants: {
-            deleteMany: {
-              id: {
-                notIn: variants
-                  .map((v: any) => (typeof v.id === 'number' ? v.id : parseInt(v.id)))
-                  .filter((id: number) => !isNaN(id))
-              },
-              orderItems: { none: {} }
-            },
             upsert: variants.map((v: any) => {
               const numId = typeof v.id === 'number' ? v.id : parseInt(v.id);
               const safeStock = Math.max(0, parseInt(v.stock) || 0);
               return {
-                where: { id: !isNaN(numId) ? numId : -1 },
+                where: { id: !isNaN(numId) && numId > 0 ? numId : -1 },
                 update: {
                   name: v.name,
                   size: v.options?.size || v.size,

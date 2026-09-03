@@ -27,6 +27,21 @@ services:
       timeout: 5s
       retries: 5
 
+  backend-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: npx prisma migrate deploy
+    restart: "no"
+    volumes:
+      - .:/app
+      - /app/node_modules
+
   backend:
     build:
       context: .
@@ -42,6 +57,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      backend-migrate:
+        condition: service_completed_successfully
     command: npm run start
     volumes:
       - uploads_data:/app/public/uploads

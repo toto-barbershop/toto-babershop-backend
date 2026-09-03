@@ -290,15 +290,17 @@ export const sendOrderEmails = async (
   shippingAddress?: string,
   items?: Array<{ title?: string; name?: string; quantity: number; price: number }>,
   options?: {
-    paymentMethod?: string;
-    paymentStatus?: 'PAID' | 'PENDING' | 'REFUNDED' | string;
-    transactionId?: string;
-    orderStatus?: string;
+    paymentMethod?: string | undefined;
+    paymentStatus?: 'PAID' | 'PENDING' | 'REFUNDED' | string | undefined;
+    transactionId?: string | undefined;
+    orderStatus?: string | undefined;
+    customerPhone?: string | null | undefined;
   }
 ) => {
   const displayCode = orderCode || `TTB-${orderId}`;
   const displayName = customerName || 'Quý khách';
   const displayAddress = shippingAddress || 'Nhận tại cửa hàng / Theo thông tin đơn';
+  const displayPhone = options?.customerPhone || '';
   const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
   const isPaid = options?.paymentStatus === 'PAID';
   const paymentMethod = options?.paymentMethod || 'cod';
@@ -370,6 +372,12 @@ export const sendOrderEmails = async (
               <td style="padding: 6px 0; color: #6b7280; font-size: 14px;">Người nhận:</td>
               <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #101715; font-size: 14px;">${displayName}</td>
             </tr>
+            ${displayPhone ? `
+            <tr>
+              <td style="padding: 6px 0; color: #6b7280; font-size: 14px;">Số điện thoại:</td>
+              <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #101715; font-size: 14px;">${displayPhone}</td>
+            </tr>
+            ` : ''}
             <tr>
               <td style="padding: 6px 0; color: #6b7280; font-size: 14px;">Địa chỉ giao:</td>
               <td style="padding: 6px 0; text-align: right; color: #101715; font-size: 14px;">${displayAddress}</td>
@@ -449,6 +457,12 @@ export const sendOrderEmails = async (
             <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Khách hàng:</td>
             <td style="padding: 8px 0; font-weight: 600; color: #101715;">${displayName} (${customerEmail})</td>
           </tr>
+          ${displayPhone ? `
+          <tr>
+            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Số điện thoại:</td>
+            <td style="padding: 8px 0; font-weight: 700; color: #101715;"><a href="tel:${displayPhone}" style="color: #287565; text-decoration: none; font-weight: 700;">${displayPhone}</a></td>
+          </tr>
+          ` : ''}
           <tr>
             <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Địa chỉ giao:</td>
             <td style="padding: 8px 0; color: #101715;">${displayAddress}</td>

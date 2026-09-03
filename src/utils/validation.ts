@@ -5,7 +5,8 @@ export const isValidEmail = (email: string): boolean => {
 
 export const isValidPhone = (phone: string): boolean => {
   if (!phone) return false;
-  return /^(0[3|5|7|8|9])+([0-9]{8})$/.test(phone.trim());
+  // Regex chuẩn cho SĐT di động Việt Nam: đúng 10 chữ số, bắt đầu bằng 03, 05, 07, 08, 09
+  return /^0[35789]\d{8}$/.test(phone.trim());
 };
 
 // Danh sách các tên miền hay bị gõ nhầm chính tả

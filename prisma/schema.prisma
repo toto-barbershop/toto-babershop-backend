@@ -94,10 +94,20 @@ model Order {
   customerEmail  String?
   shippingAddress String?
   note           String?
+  cancelReason   String?     // Lý do hủy: khách chọn, admin ghi chú, hoặc system timeout
+  cancelledBy    String?     // 'customer' | 'admin' | 'system_timeout'
+  deliveryAttempts Int       @default(0)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
   items          OrderItem[]
   statusHistory  OrderStatusHistory[]
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([paymentMethod])
+  @@index([customerPhone])
+  @@index([orderCode])
 }
 
 model OrderStatusHistory {
@@ -109,6 +119,14 @@ model OrderStatusHistory {
   changedBy  String   @default("admin")
   note       String?
   changedAt  DateTime @default(now())
+}
+
+model BlockedPhone {
+  id        Int      @id @default(autoincrement())
+  phone     String   @unique
+  reason    String?
+  createdAt DateTime @default(now())
+  createdBy String?  @default("admin")
 }
 
 model OrderItem {

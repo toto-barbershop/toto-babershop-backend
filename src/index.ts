@@ -24,6 +24,11 @@ import { requestLoggerMiddleware } from './middlewares/requestLoggerMiddleware.j
 import { logger } from './utils/logger.js';
 import { startOrderScheduler } from './services/orderScheduler.js';
 
+// Tự động serialize BigInt thành String khi JSON.stringify/res.json
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
 const app = express();
 
 // Trust reverse proxy (Caddy) to get correct client IP from X-Forwarded-For

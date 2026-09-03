@@ -155,15 +155,16 @@ jobs:
           script: |
             set -e
             cd ~/app
+            git config core.fileMode false
 
             # 1. Ghi lại commit đang chạy ổn định TRƯỚC KHI git pull (phục vụ rollback chuẩn xác)
             git rev-parse HEAD > ~/backups/pre-deploy/LAST_GOOD_COMMIT.txt
             chmod 600 ~/backups/pre-deploy/LAST_GOOD_COMMIT.txt
             echo "Commit ổn định hiện tại: $(cat ~/backups/pre-deploy/LAST_GOOD_COMMIT.txt)"
 
-            # 2. Kéo code mới và phân quyền cho script rollback
-            git pull origin main
-            chmod +x ~/app/scripts/rollback.sh 2>/dev/null || true
+            # 2. Kéo code mới (dùng fetch + reset --hard để đảm bảo đồng bộ sạch sẽ 100%)
+            git fetch origin main
+            git reset --hard origin/main
 
             # 3. Khởi chạy và build các service
             docker compose up -d --build backend

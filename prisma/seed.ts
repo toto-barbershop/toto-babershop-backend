@@ -516,7 +516,7 @@ async function main() {
       heroImage: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-jacket.png`,
       blocks: [
         { id: "b3", type: "quote", body: "Bền bỉ, thực dụng, và mộc mạc." },
-        { id: "b4", type: "image", image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-jacket-detail.png` }
+        { id: "b4", type: "image", image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/merch-jacket1.png` }
       ],
       gallery: [],
       status: 'published',

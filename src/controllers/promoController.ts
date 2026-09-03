@@ -74,7 +74,7 @@ export const validatePromoCode = async (req: Request, res: Response) => {
     const { code, subtotal } = req.body;
     
     if (!code || subtotal === undefined) {
-      return res.status(400).json({ error: "Thiếu code hoặc subtotal", reqId: req.id });
+      return res.status(400).json({ success: false, error: "Thiếu code hoặc subtotal", reqId: req.id });
     }
 
     const cacheKey = `promo:${code.toUpperCase()}`;
@@ -96,22 +96,22 @@ export const validatePromoCode = async (req: Request, res: Response) => {
 
     if (!promo || !promo.isActive) {
       logger.warn(`Promo validate failed: inactive or not found: ${code}`, { reqId: req.id });
-      return res.status(400).json({ error: "Mã khuyến mãi không hợp lệ hoặc đã bị khóa.", reqId: req.id });
+      return res.status(400).json({ success: false, error: "Mã khuyến mãi không hợp lệ hoặc đã bị khóa.", reqId: req.id });
     }
 
     if (promo.expiresAt && new Date() > new Date(promo.expiresAt)) {
       logger.warn(`Promo validate failed: expired: ${code}`, { reqId: req.id, expiresAt: promo.expiresAt });
-      return res.status(400).json({ error: "Mã khuyến mãi đã hết hạn sử dụng.", reqId: req.id });
+      return res.status(400).json({ success: false, error: "Mã khuyến mãi đã hết hạn sử dụng.", reqId: req.id });
     }
 
     if (promo.usageLimit !== null && promo.usedCount >= promo.usageLimit) {
       logger.warn(`Promo validate failed: usage limit reached: ${code} (${promo.usedCount}/${promo.usageLimit})`, { reqId: req.id });
-      return res.status(400).json({ error: "Mã khuyến mãi đã hết lượt sử dụng.", reqId: req.id });
+      return res.status(400).json({ success: false, error: "Mã khuyến mãi đã hết lượt sử dụng.", reqId: req.id });
     }
 
     if (subtotal < promo.minOrderValue) {
       logger.warn(`Promo validate failed: minOrderValue not reached: ${code} (${subtotal} < ${promo.minOrderValue})`, { reqId: req.id });
-      return res.status(400).json({ error: `Đơn hàng chưa đạt giá trị tối thiểu ${promo.minOrderValue.toLocaleString("vi-VN")}đ để sử dụng mã này.`, reqId: req.id });
+      return res.status(400).json({ success: false, error: `Đơn hàng chưa đạt giá trị tối thiểu ${promo.minOrderValue.toLocaleString("vi-VN")}đ để sử dụng mã này.`, reqId: req.id });
     }
 
     let discount = 0;

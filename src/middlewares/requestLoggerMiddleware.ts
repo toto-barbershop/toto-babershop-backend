@@ -19,7 +19,9 @@ export const requestLoggerMiddleware = (req: Request, res: Response, next: NextF
   res.setHeader('X-Request-Id', reqId);
 
   // Avoid logging health-check spam unless in debug
-  if (req.path !== '/') {
+  const isHealthCheck = req.path === '/' || req.path === '/health' || req.path === '/api/health';
+
+  if (!isHealthCheck) {
     logger.info(`--> [REQ-START] ${req.method} ${req.originalUrl || req.url}`, {
       reqId,
       ip: req.ip || req.socket.remoteAddress,
@@ -31,7 +33,7 @@ export const requestLoggerMiddleware = (req: Request, res: Response, next: NextF
     const status = res.statusCode;
     const isError = status >= 400;
 
-    if (req.path !== '/') {
+    if (!isHealthCheck) {
       const msg = `<-- [REQ-END] ${req.method} ${req.originalUrl || req.url} ${status}`;
       if (isError) {
         logger.warn(msg, { reqId, durationMs, status });

@@ -22,6 +22,7 @@ import { fileURLToPath } from 'url';
 import { globalLimiter } from './middlewares/rateLimitMiddleware.js';
 import { requestLoggerMiddleware } from './middlewares/requestLoggerMiddleware.js';
 import { logger } from './utils/logger.js';
+import { prisma } from './config/db.js';
 import { startOrderScheduler } from './services/orderScheduler.js';
 
 // Tự động serialize BigInt thành String khi JSON.stringify/res.json
@@ -63,7 +64,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
-// Health check
+// Health check endpoint (xác thực server chạy & kết nối PostgreSQL thông suốt)
+app.get(['/health', '/api/health'], async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ status: 'ok', database: 'connected' });
+  } catch (error: any) {
+    res.status(503).json({ status: 'error', database: 'disconnected', error: error?.message || 'Database unavailable' });
+  }
+});
+
 app.get('/', (req, res) => {
   res.send('Toto Barbershop Secure API is running');
 });

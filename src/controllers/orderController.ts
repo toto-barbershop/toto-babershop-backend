@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { createRequire } from 'module';
 import redis from '../config/redis.js';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import { isValidEmail, isValidPhone } from '../utils/validation.js';
 import { sendOrderEmails, sendOrderCancelledEmail } from '../services/emailService.js';
 import { logger } from '../utils/logger.js';
@@ -25,13 +26,13 @@ const payos = new PayOS({
   checksumKey: process.env.PAYOS_CHECKSUM_KEY!
 });
 
-// Sinh mã đơn hàng quy chuẩn: TTB-YYMMDD-XXXX (VD: TTB-260818-8A3F)
-const generateOrderCode = (): string => {
+// Sinh mã đơn hàng quy chuẩn: TTB-YYMMDD-XXXXXXXX (VD: TTB-260903-8F3A2B1C)
+export const generateOrderCode = (): string => {
   const now = new Date();
   const datePart = now.getFullYear().toString().slice(-2)
     + String(now.getMonth() + 1).padStart(2, '0')
     + String(now.getDate()).padStart(2, '0');
-  const randPart = Math.random().toString(36).toUpperCase().slice(2, 6);
+  const randPart = crypto.randomBytes(4).toString('hex').toUpperCase();
   return `TTB-${datePart}-${randPart}`;
 };
 
@@ -229,30 +230,82 @@ export const createOrder = async (req: Request, res: Response) => {
         logger.race(`Stock decremented for Variant #${variantId}: ${currentStock} -> ${currentStock - item.quantity}`, { reqId: req.id });
       }
 
-      // Xử lý mã giảm giá nếu có
-      if (promoCode) {
-        logger.race(`Locking PromoCode row (FOR UPDATE): ${promoCode}`, { reqId: req.id });
+      // 1. Tính tổng tiền hàng (subtotal) từ giá DB (chống client price manipulation)
+      const serverSubtotal = items.reduce((sum: number, i: any) => {
+        const dbPrice = priceMap.get(Number(i.variantId));
+        const safePrice = dbPrice !== undefined ? dbPrice : Number(i.price);
+        return sum + safePrice * Number(i.quantity);
+      }, 0);
+
+      // 2. Xử lý và kiểm tra mã giảm giá (PromoCode) nếu có — hoàn toàn tự tính từ DB dưới Row Lock
+      let computedDiscount = 0;
+      let appliedPromoCode: string | null = null;
+
+      if (promoCode && typeof promoCode === 'string' && promoCode.trim()) {
+        const cleanPromoCode = promoCode.trim().toUpperCase();
+        logger.race(`Locking PromoCode row (FOR UPDATE): ${cleanPromoCode}`, { reqId: req.id });
         const promoRows = await tx.$queryRaw<any[]>`
           SELECT * FROM "PromoCode"
-          WHERE code = ${promoCode}
+          WHERE code = ${cleanPromoCode}
           FOR UPDATE
         `;
-        if (promoRows && promoRows.length > 0) {
-          const p = promoRows[0];
-          if (p.isActive && (p.usageLimit === null || p.usedCount < p.usageLimit)) {
-            await tx.promoCode.update({
-              where: { code: promoCode },
-              data: { usedCount: p.usedCount + 1 }
-            });
-            logger.race(`PromoCode #${promoCode} consumed: ${p.usedCount} -> ${p.usedCount + 1} (Limit: ${p.usageLimit ?? '∞'})`, { reqId: req.id });
-          } else {
-            logger.warn(`PromoCode #${promoCode} exhausted or inactive under lock`, { reqId: req.id, usedCount: p.usedCount, usageLimit: p.usageLimit });
-            throw new Error('Mã giảm giá không hợp lệ hoặc đã hết lượt dùng.');
-          }
+
+        if (!promoRows || promoRows.length === 0) {
+          throw new Error(`Mã giảm giá "${cleanPromoCode}" không tồn tại trên hệ thống.`);
         }
+
+        const p = promoRows[0];
+
+        // A. Kiểm tra trạng thái hoạt động
+        if (!p.isActive) {
+          logger.warn(`PromoCode #${cleanPromoCode} is inactive under lock`, { reqId: req.id });
+          throw new Error(`Mã giảm giá "${cleanPromoCode}" hiện đang tạm thời bị khóa.`);
+        }
+
+        // B. Kiểm tra hạn sử dụng (expiresAt)
+        if (p.expiresAt && new Date() > new Date(p.expiresAt)) {
+          logger.warn(`PromoCode #${cleanPromoCode} expired under lock`, { reqId: req.id, expiresAt: p.expiresAt });
+          throw new Error(`Mã giảm giá "${cleanPromoCode}" đã hết hạn sử dụng.`);
+        }
+
+        // C. Kiểm tra giới hạn số lượt sử dụng toàn hệ thống (usageLimit)
+        if (p.usageLimit !== null && p.usedCount >= p.usageLimit) {
+          logger.warn(`PromoCode #${cleanPromoCode} usage limit reached under lock`, { reqId: req.id, usedCount: p.usedCount, usageLimit: p.usageLimit });
+          throw new Error(`Mã giảm giá "${cleanPromoCode}" đã hết lượt sử dụng.`);
+        }
+
+        // D. Kiểm tra giá trị đơn hàng tối thiểu (minOrderValue)
+        if (p.minOrderValue && serverSubtotal < p.minOrderValue) {
+          logger.warn(`PromoCode #${cleanPromoCode} minOrderValue not met`, { reqId: req.id, serverSubtotal, minOrderValue: p.minOrderValue });
+          throw new Error(`Đơn hàng chưa đạt giá trị tối thiểu ${Number(p.minOrderValue).toLocaleString('vi-VN')}đ để áp dụng mã "${cleanPromoCode}".`);
+        }
+
+        // E. Tự tính toán số tiền giảm giá thực tế (Server-calculated discount)
+        if (p.discountType === 'PERCENT') {
+          computedDiscount = Math.floor(serverSubtotal * (Number(p.discountValue) / 100));
+          if (p.maxDiscount && computedDiscount > p.maxDiscount) {
+            computedDiscount = Number(p.maxDiscount);
+          }
+        } else if (p.discountType === 'FIXED') {
+          computedDiscount = Number(p.discountValue);
+        }
+
+        // F. Giới hạn số tiền giảm không được vượt quá subtotal
+        computedDiscount = Math.min(Math.max(0, computedDiscount), serverSubtotal);
+
+        // G. Tăng số lượt đã sử dụng và ghi nhận mã
+        await tx.promoCode.update({
+          where: { code: cleanPromoCode },
+          data: { usedCount: p.usedCount + 1 }
+        });
+
+        appliedPromoCode = cleanPromoCode;
+        // Xóa cache Redis của promo code này để tránh stale cache
+        await redis.del(`promo:${cleanPromoCode}`).catch(() => {});
+        logger.race(`PromoCode #${cleanPromoCode} consumed successfully: discount ${computedDiscount}đ (${p.usedCount} -> ${p.usedCount + 1})`, { reqId: req.id });
       }
 
-      // Lưu địa chỉ mặc định cho user (nếu có địa chỉ đầy đủ)
+      // 3. Lưu địa chỉ mặc định cho user (nếu có địa chỉ đầy đủ)
       if (userId && address && typeof address === 'object' && address.province) {
         const userAddresses = await tx.address.findMany({ where: { userId } });
         const existingDefault = userAddresses.find(a => a.isDefault) || userAddresses[0];
@@ -288,24 +341,33 @@ export const createOrder = async (req: Request, res: Response) => {
             .replace(/(, )+/g, ', ').replace(/^, |, $/g, '')
         : null;
 
-      // Tính tổng tiền từ giá DB (chống client price manipulation)
-      const serverSubtotal = items.reduce((sum: number, i: any) => {
-        const dbPrice = priceMap.get(Number(i.variantId));
-        const safePrice = dbPrice !== undefined ? dbPrice : Number(i.price);
-        return sum + safePrice * Number(i.quantity);
-      }, 0);
       // Phí vận chuyển: COD = 30.000đ, PayOS = miễn phí (đồng bộ với FE)
       const SHIPPING_FEE = (paymentMethod === 'cod' || paymentMethod === 'COD') ? 30000 : 0;
-      const safeDiscount = Math.min(Math.max(0, Number(discount) || 0), serverSubtotal);
+      const safeDiscount = computedDiscount;
       const serverTotal = Math.max(0, serverSubtotal + SHIPPING_FEE - safeDiscount);
+
+      // Sinh mã đơn hàng 8 ký tự hex duy nhất với vòng lặp retry (tối đa 3 lần) phòng ngừa collision
+      let uniqueOrderCode = generateOrderCode();
+      const MAX_CODE_RETRIES = 3;
+      for (let attempt = 0; attempt < MAX_CODE_RETRIES; attempt++) {
+        const existingCode = await tx.order.findUnique({
+          where: { orderCode: uniqueOrderCode },
+          select: { id: true }
+        });
+        if (!existingCode) {
+          break;
+        }
+        logger.warn(`Collision detected on orderCode "${uniqueOrderCode}", retrying generation (${attempt + 1}/${MAX_CODE_RETRIES})...`, { reqId: req.id });
+        uniqueOrderCode = generateOrderCode();
+      }
 
       const newOrder = await tx.order.create({
         data: {
-          orderCode: generateOrderCode(),
+          orderCode: uniqueOrderCode,
           userId: Number(userId),
           total: serverTotal,
           discount: safeDiscount,
-          promoCode: promoCode ?? null,
+          promoCode: appliedPromoCode,
           idempotencyKey: idempotencyKey ?? null,
           paymentMethod: paymentMethod || 'COD',
           paymentStatus: (paymentMethod && paymentMethod.toLowerCase() === 'payos') ? 'UNPAID' : 'COD_UNPAID',
@@ -456,6 +518,18 @@ export const payosWebhook = async (req: Request, res: Response) => {
     // Idempotent: nếu đã thanh toán rồi thì bỏ qua
     if (order.paymentStatus === 'PAID') {
       return res.status(200).json({ message: 'Already processed' });
+    }
+
+    // Xác thực số tiền thanh toán khớp chính xác với tổng tiền đơn hàng (Chống lệch tiền / giả mạo)
+    if (webhookData.amount !== undefined && Number(webhookData.amount) !== Number(order.total)) {
+      logger.error(`payOS webhook amount mismatch: Order #${order.id} expects ${order.total}đ but received ${webhookData.amount}đ`, {
+        orderId: order.id,
+        orderCode: order.orderCode,
+        expectedAmount: order.total,
+        receivedAmount: webhookData.amount,
+        payosOrderCode: orderCode,
+      });
+      return res.status(400).json({ error: 'Số tiền thanh toán không khớp với đơn hàng.' });
     }
 
     await prisma.$transaction(async (tx) => {
@@ -813,7 +887,20 @@ export const validatePaymentTransition = (
   const targetP = (targetPaymentStatus || 'UNPAID').toUpperCase();
   const method = (paymentMethod || 'COD').toUpperCase();
 
-  // 1. Không thay đổi trạng thái thanh toán -> Luôn hợp lệ
+  // =================================================================
+  // 0. QUY TẮC TOÀN CỤC: BẮT BUỘC REFUNDED KHI HỦY ĐƠN ĐÃ THU TIỀN (PAID / COD_COLLECTED)
+  // =================================================================
+  // Áp dụng cho MỌI trạng thái nguồn chuyển sang CANCELLED:
+  // Nếu đơn hàng đã thu tiền mà bị hủy, BẮT BUỘC trạng thái thanh toán phải là REFUNDED.
+  // Tuyệt đối không cho phép giữ nguyên PAID / COD_COLLECTED hoặc chuyển về trạng thái khác.
+  if (oStatus === 'CANCELLED' && (currentP === 'PAID' || currentP === 'COD_COLLECTED') && targetP !== 'REFUNDED') {
+    return {
+      isValid: false,
+      error: `Đơn hàng đã phát sinh thu tiền (${currentP === 'PAID' ? 'Đã thanh toán qua PayOS' : 'Đã thu tiền mặt COD'}). Khi chuyển sang trạng thái Đã hủy (CANCELLED), bắt buộc trạng thái thanh toán phải là "Đã hoàn tiền" (REFUNDED).`
+    };
+  }
+
+  // 1. Không thay đổi trạng thái thanh toán -> Luôn hợp lệ (ngoại trừ trường hợp hủy đơn đã thu tiền ở trên)
   if (currentP === targetP) {
     return { isValid: true };
   }
@@ -938,20 +1025,18 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     }
 
     // 2. Kiểm tra State Machine cho paymentStatus (DỰA TRÊN TRẠNG THÁI ĐÍCH targetStatus)
-    if (paymentStatus) {
-      const targetPaymentStatus = paymentStatus.toUpperCase();
-      const paymentValidation = validatePaymentTransition(
-        targetStatus,
-        currentPaymentStatus,
-        targetPaymentStatus,
-        existingOrder.paymentMethod
-      );
+    const targetPaymentStatus = paymentStatus ? paymentStatus.toUpperCase() : currentPaymentStatus;
+    const paymentValidation = validatePaymentTransition(
+      targetStatus,
+      currentPaymentStatus,
+      targetPaymentStatus,
+      existingOrder.paymentMethod
+    );
 
-      if (!paymentValidation.isValid) {
-        return res.status(422).json({
-          error: paymentValidation.error
-        });
-      }
+    if (!paymentValidation.isValid) {
+      return res.status(422).json({
+        error: paymentValidation.error
+      });
     }
 
     // 2. Nếu chuyển sang trạng thái CANCELLED và đơn trước đó chưa hủy, hoàn lại kho
@@ -1111,7 +1196,9 @@ export const cancelOrder = async (req: Request, res: Response) => {
     if (order.userId !== userId) return res.status(403).json({ error: 'Bạn không có quyền hủy đơn hàng này.' });
     if (order.status === 'CANCELLED') return res.status(400).json({ error: 'Đơn hàng này đã được hủy trước đó rồi.' });
     if (order.status !== 'PENDING') return res.status(400).json({ error: `Không thể hủy do đơn hàng đang ở trạng thái "${order.status}".` });
-    if (order.paymentStatus === 'PAID') return res.status(400).json({ error: 'Đơn hàng đã thanh toán thành công. Vui lòng liên hệ CSKH để được hỗ trợ hoàn tiền.' });
+    if (order.paymentStatus === 'PAID' || order.paymentStatus === 'COD_COLLECTED') {
+      return res.status(400).json({ error: 'Đơn hàng đã phát sinh thu tiền thành công. Vui lòng liên hệ CSKH để được hỗ trợ hoàn tiền và hủy đơn.' });
+    }
 
     // Trả lại kho
     await prisma.$transaction(async (tx) => {
@@ -1421,8 +1508,8 @@ export const cancelOrderByCode = async (req: Request, res: Response) => {
       return res.status(400).json({ error: `Không thể hủy do đơn hàng đang ở trạng thái "${order.status}".` });
     }
 
-    if (order.paymentStatus === 'PAID') {
-      return res.status(400).json({ error: 'Đơn hàng đã thanh toán thành công. Vui lòng liên hệ CSKH để được hỗ trợ hoàn tiền.' });
+    if (order.paymentStatus === 'PAID' || order.paymentStatus === 'COD_COLLECTED') {
+      return res.status(400).json({ error: 'Đơn hàng đã phát sinh thu tiền thành công. Vui lòng liên hệ CSKH để được hỗ trợ hoàn tiền và hủy đơn.' });
     }
 
     // Trả lại kho dùng concurrency lock FOR UPDATE

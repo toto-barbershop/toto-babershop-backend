@@ -178,22 +178,59 @@ export const resetPassword = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Mã xác nhận không hợp lệ hoặc đã hết hạn sử dụng.', reqId: req.id });
     }
 
-    const tokenHash = crypto.createHash('sha256').update(code).digest('hex');
-
-    const token = await prisma.passwordResetToken.findFirst({
+    // Tìm mã OTP còn hạn sử dụng và chưa được dùng của người dùng này
+    const activeToken = await prisma.passwordResetToken.findFirst({
       where: {
         userId: user.id,
-        tokenHash,
         used: false,
         expiresAt: { gt: new Date() }
       },
       orderBy: { createdAt: 'desc' }
     });
 
-    if (!token) {
-      logger.warn(`Reset password failed: invalid/expired OTP token for: ${email}`, { reqId: req.id });
-      return res.status(400).json({ error: 'Mã xác nhận OTP không đúng hoặc đã hết hạn. Vui lòng yêu cầu mã mới.', reqId: req.id });
+    if (!activeToken) {
+      logger.warn(`Reset password failed: no active OTP token for: ${email}`, { reqId: req.id });
+      return res.status(400).json({ error: 'Mã xác nhận không tồn tại hoặc đã hết hạn. Vui lòng yêu cầu mã mới.', reqId: req.id });
     }
+
+    // Kiểm tra số lần thử sai (Khóa sau 5 lần)
+    if (activeToken.attempts >= 5) {
+      logger.warn(`Reset password failed: OTP locked after 5 failed attempts for: ${email}`, { reqId: req.id });
+      return res.status(400).json({
+        error: 'Mã xác nhận OTP đã bị vô hiệu hóa do nhập sai quá 5 lần. Vui lòng gửi yêu cầu lấy mã mới.',
+        code: 'OTP_LOCKED',
+        reqId: req.id
+      });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(code.trim()).digest('hex');
+
+    if (activeToken.tokenHash !== tokenHash) {
+      const newAttempts = activeToken.attempts + 1;
+      await prisma.passwordResetToken.update({
+        where: { id: activeToken.id },
+        data: { attempts: newAttempts }
+      });
+
+      const remaining = Math.max(0, 5 - newAttempts);
+      logger.warn(`Reset password failed: incorrect OTP for ${email} (attempt ${newAttempts}/5)`, { reqId: req.id });
+
+      if (remaining === 0) {
+        return res.status(400).json({
+          error: 'Mã xác nhận OTP không đúng. Bạn đã nhập sai 5 lần, mã OTP này đã bị khóa. Vui lòng yêu cầu mã mới.',
+          code: 'OTP_LOCKED',
+          reqId: req.id
+        });
+      }
+
+      return res.status(400).json({
+        error: `Mã xác nhận OTP không chính xác. Bạn còn ${remaining} lần thử lại.`,
+        remainingAttempts: remaining,
+        reqId: req.id
+      });
+    }
+
+    const token = activeToken;
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     

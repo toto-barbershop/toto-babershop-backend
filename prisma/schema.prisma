@@ -72,6 +72,8 @@ model ProductVariant {
   stock          Int       @default(0)
   sku            String?   @unique
   orderItems     OrderItem[]
+
+  @@index([stock])
 }
 
 model Order {
@@ -163,6 +165,7 @@ model PasswordResetToken {
   tokenHash  String
   expiresAt  DateTime
   used       Boolean  @default(false)
+  attempts   Int      @default(0)
   createdAt  DateTime @default(now())
 }
 

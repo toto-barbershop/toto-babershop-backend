@@ -798,6 +798,110 @@ export const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [], // Trạng thái cuối, không thể thay đổi
 };
 
+/**
+ * Kiểm tra tính hợp lệ của việc chuyển đổi trạng thái thanh toán (Payment Status Transition)
+ * dựa trên trạng thái đơn hàng đích (targetOrderStatus) và phương thức thanh toán.
+ */
+export const validatePaymentTransition = (
+  targetOrderStatus: string,
+  currentPaymentStatus: string,
+  targetPaymentStatus: string,
+  paymentMethod: string
+): { isValid: boolean; error?: string } => {
+  const oStatus = (targetOrderStatus || 'PENDING').toUpperCase();
+  const currentP = (currentPaymentStatus || 'UNPAID').toUpperCase();
+  const targetP = (targetPaymentStatus || 'UNPAID').toUpperCase();
+  const method = (paymentMethod || 'COD').toUpperCase();
+
+  // 1. Không thay đổi trạng thái thanh toán -> Luôn hợp lệ
+  if (currentP === targetP) {
+    return { isValid: true };
+  }
+
+  // =================================================================
+  // CÁC QUY TẮC TOÀN CỤC (GLOBAL INVARIANTS) - ÁP DỤNG MỌI ORDER STATUS
+  // =================================================================
+
+  // A. Không thể REFUND nếu chưa từng thu tiền
+  if (targetP === 'REFUNDED' && (currentP === 'UNPAID' || currentP === 'COD_UNPAID')) {
+    return {
+      isValid: false,
+      error: `Không thể hoàn tiền (REFUNDED) cho đơn hàng chưa từng phát sinh thanh toán (${currentP}).`
+    };
+  }
+
+  // B. Không thể revert ("undo") đơn đã thu tiền về chưa thanh toán
+  if ((currentP === 'PAID' || currentP === 'COD_COLLECTED') && (targetP === 'UNPAID' || targetP === 'COD_UNPAID')) {
+    return {
+      isValid: false,
+      error: `Không thể chuyển ngược đơn đã thu tiền (${currentP}) về trạng thái chưa thanh toán (${targetP}).`
+    };
+  }
+
+  // C. Đã REFUNDED thì khóa vĩnh viễn, không thể đổi sang bất kỳ trạng thái nào khác
+  if (currentP === 'REFUNDED') {
+    return {
+      isValid: false,
+      error: 'Đơn hàng đã ở trạng thái Đã hoàn tiền (REFUNDED), không thể thay đổi thêm.'
+    };
+  }
+
+  // =================================================================
+  // CÁC QUY TẮC THEO TRẠNG THÁI ĐƠN HÀNG (ORDER STATUS-SPECIFIC RULES)
+  // =================================================================
+
+  // 2. Khi đơn hàng ở trạng thái CANCELLED (Đã hủy)
+  if (oStatus === 'CANCELLED') {
+    // Đơn đã hủy thì cấm thu tiền (PAID hoặc COD_COLLECTED)
+    if (targetP === 'PAID' || targetP === 'COD_COLLECTED') {
+      return {
+        isValid: false,
+        error: `Đơn hàng đã Hủy (CANCELLED), không thể ghi nhận thu tiền (${targetP}).`
+      };
+    }
+  }
+
+  // 3. Khi đơn hàng ở trạng thái COMPLETED (Hoàn thành)
+  if (oStatus === 'COMPLETED') {
+    // Nếu đang là COD_UNPAID: chỉ có thể chuyển sang COD_COLLECTED
+    if (currentP === 'COD_UNPAID' && targetP !== 'COD_COLLECTED') {
+      return {
+        isValid: false,
+        error: `Đơn COD đã hoàn thành nhưng chưa thu tiền, chỉ có thể chuyển sang "Đã thu tiền COD" (COD_COLLECTED).`
+      };
+    }
+  }
+
+  // 4. Khi đơn hàng ở trạng thái chưa xuất giao (PENDING, PROCESSING) hoặc giao thất bại (DELIVERY_FAILED)
+  if (oStatus === 'PENDING' || oStatus === 'PROCESSING' || oStatus === 'DELIVERY_FAILED') {
+    if (method === 'COD' && targetP === 'COD_COLLECTED') {
+      return {
+        isValid: false,
+        error: `Chỉ có thể xác nhận thu tiền COD khi đơn hàng đang giao (SHIPPED) hoặc đã hoàn thành (COMPLETED). Hiện tại đơn đang ở trạng thái "${oStatus}".`
+      };
+    }
+  }
+
+  // 5. Kiểm tra tính tương thích phương thức thanh toán
+  if (method === 'COD') {
+    if (targetP === 'PAID') {
+      return {
+        isValid: false,
+        error: `Đơn hàng phương thức COD sử dụng trạng thái "COD_COLLECTED" thay vì "PAID".`
+      };
+    }
+  } else {
+    if (targetP === 'COD_COLLECTED' || targetP === 'COD_UNPAID') {
+      return {
+        isValid: false,
+        error: `Đơn hàng không phải COD, không thể dùng trạng thái ${targetP}.`
+      };
+    }
+  }
+
+  return { isValid: true };
+};
+
 export const updateOrderStatus = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -811,26 +915,42 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     if (!existingOrder) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
 
     const currentStatus = (existingOrder.status || 'PENDING').toUpperCase();
+    const currentPaymentStatus = (existingOrder.paymentStatus || 'UNPAID').toUpperCase();
 
     // 1. Kiểm tra State Machine nếu có yêu cầu đổi status
-    if (status) {
-      const targetStatus = status.toUpperCase();
+    const targetStatus = status ? status.toUpperCase() : currentStatus;
 
-      if (targetStatus !== currentStatus) {
-        // Kiểm tra xem đơn hàng đã ở trạng thái kết thúc (Terminal) chưa
-        if (currentStatus === 'COMPLETED' || currentStatus === 'CANCELLED') {
-          const statusText = currentStatus === 'COMPLETED' ? 'Hoàn thành' : 'Đã hủy';
-          return res.status(422).json({
-            error: `Đơn hàng đã ở trạng thái "${statusText}" (kết thúc), không thể thay đổi trạng thái nữa.`
-          });
-        }
+    if (status && targetStatus !== currentStatus) {
+      // Kiểm tra xem đơn hàng đã ở trạng thái kết thúc (Terminal) chưa
+      if (currentStatus === 'COMPLETED' || currentStatus === 'CANCELLED') {
+        const statusText = currentStatus === 'COMPLETED' ? 'Hoàn thành' : 'Đã hủy';
+        return res.status(422).json({
+          error: `Đơn hàng đã ở trạng thái "${statusText}" (kết thúc), không thể thay đổi trạng thái nữa.`
+        });
+      }
 
-        const validNext = VALID_STATUS_TRANSITIONS[currentStatus] || [];
-        if (!validNext.includes(targetStatus)) {
-          return res.status(422).json({
-            error: `Không thể chuyển trạng thái từ "${currentStatus}" sang "${targetStatus}". Các trạng thái hợp lệ tiếp theo: ${validNext.join(', ') || 'Không có'}.`
-          });
-        }
+      const validNext = VALID_STATUS_TRANSITIONS[currentStatus] || [];
+      if (!validNext.includes(targetStatus)) {
+        return res.status(422).json({
+          error: `Không thể chuyển trạng thái từ "${currentStatus}" sang "${targetStatus}". Các trạng thái hợp lệ tiếp theo: ${validNext.join(', ') || 'Không có'}.`
+        });
+      }
+    }
+
+    // 2. Kiểm tra State Machine cho paymentStatus (DỰA TRÊN TRẠNG THÁI ĐÍCH targetStatus)
+    if (paymentStatus) {
+      const targetPaymentStatus = paymentStatus.toUpperCase();
+      const paymentValidation = validatePaymentTransition(
+        targetStatus,
+        currentPaymentStatus,
+        targetPaymentStatus,
+        existingOrder.paymentMethod
+      );
+
+      if (!paymentValidation.isValid) {
+        return res.status(422).json({
+          error: paymentValidation.error
+        });
       }
     }
 
@@ -897,14 +1017,26 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     // 3. Ghi Audit Log vào OrderStatusHistory
     const changedBy = (req as any).user?.email || (req as any).user?.name || 'admin';
-    if (status && status.toUpperCase() !== currentStatus) {
+    const isStatusChanged = status && status.toUpperCase() !== currentStatus;
+    const isPaymentChanged = paymentStatus && paymentStatus.toUpperCase() !== currentPaymentStatus;
+
+    if (isStatusChanged || isPaymentChanged) {
+      let logNote = '';
+      if (isStatusChanged && isPaymentChanged) {
+        logNote = `${cancelReason || (status.toUpperCase() === 'CANCELLED' ? 'Admin hủy đơn' : `Chuyển trạng thái sang ${status.toUpperCase()}`)} | Thanh toán: ${currentPaymentStatus} ➔ ${paymentStatus.toUpperCase()}`;
+      } else if (isStatusChanged) {
+        logNote = cancelReason || (status.toUpperCase() === 'CANCELLED' ? 'Admin hủy đơn' : `Chuyển trạng thái sang ${status.toUpperCase()}`);
+      } else {
+        logNote = `Cập nhật trạng thái thanh toán: ${currentPaymentStatus} ➔ ${paymentStatus.toUpperCase()}`;
+      }
+
       await prisma.orderStatusHistory.create({
         data: {
           orderId: order.id,
           oldStatus: currentStatus,
-          newStatus: status.toUpperCase(),
+          newStatus: status ? status.toUpperCase() : currentStatus,
           changedBy: String(changedBy),
-          note: cancelReason || (status.toUpperCase() === 'CANCELLED' ? 'Admin hủy đơn' : `Chuyển trạng thái sang ${status.toUpperCase()}`),
+          note: logNote,
         }
       }).catch(err => console.error('Lỗi ghi audit log order status:', err));
     }
@@ -1384,10 +1516,17 @@ export const markCodCollected = async (req: Request, res: Response) => {
     }
 
     const currentStatus = (order.status || 'PENDING').toUpperCase();
-    if (currentStatus !== 'SHIPPED' && currentStatus !== 'COMPLETED') {
-      return res.status(400).json({
-        error: `Chỉ có thể xác nhận thu tiền khi đơn hàng đang giao (SHIPPED) hoặc đã hoàn thành (COMPLETED). Hiện tại đơn đang ở trạng thái "${currentStatus}".`
-      });
+    const currentPaymentStatus = (order.paymentStatus || 'UNPAID').toUpperCase();
+
+    const validation = validatePaymentTransition(
+      currentStatus,
+      currentPaymentStatus,
+      'COD_COLLECTED',
+      order.paymentMethod
+    );
+
+    if (!validation.isValid) {
+      return res.status(422).json({ error: validation.error });
     }
 
     const updated = await prisma.order.update({

@@ -90,7 +90,49 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: SSH and Deploy to VPS
+      # ==========================================
+      # BƯỚC 1 (MỚI): BACKUP DB TRƯỚC KHI DEPLOY & KIỂM TRA AN TOÀN
+      # ==========================================
+      - name: 1. Pre-Deploy Database Backup
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          timeout: 60s
+          command_timeout: 10m
+          script: |
+            set -e
+            cd ~/app
+
+            # 1. Dọn dẹp các bản backup pre-deploy cũ hơn 14 ngày
+            mkdir -p ~/backups/pre-deploy
+            find ~/backups/pre-deploy -type f -name "backup_*.sql" -mtime +14 -delete 2>/dev/null || true
+
+            # 2. Tạo bản backup Production DB với timestamp
+            BACKUP_FILE=~/backups/pre-deploy/backup_$(date +%Y%m%d_%H%M%S).sql
+            echo "::notice::Bắt đầu sao lưu Production DB trước khi deploy: $BACKUP_FILE"
+            docker compose exec -T db pg_dump -U postgres totodb > "$BACKUP_FILE"
+
+            # 3. Kiểm tra tính toàn vẹn: File không được rỗng và phải chứa header dump PostgreSQL hợp lệ
+            if [ ! -s "$BACKUP_FILE" ] || ! grep -q "PostgreSQL database dump" "$BACKUP_FILE"; then
+              echo "::error::CRITICAL: Pre-deploy database backup thất bại hoặc file rỗng! Dừng pipeline ngay lập tức."
+              rm -f "$BACKUP_FILE"
+              exit 1
+            fi
+
+            BACKUP_SIZE=$(ls -lh "$BACKUP_FILE" | awk '{print $5}')
+            echo "========================================================"
+            echo " PRE-DEPLOY BACKUP THÀNH CÔNG"
+            echo " File: $BACKUP_FILE"
+            echo " Dung lượng: $BACKUP_SIZE"
+            echo "========================================================"
+
+      # ==========================================
+      # BƯỚC 2 (GIỮ NGUYÊN): PULL CODE & BUILD SERVICES
+      # ==========================================
+      - name: 2. Deploy to VPS (Git Pull & Docker Build)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -104,3 +146,22 @@ jobs:
             git pull origin main
             docker compose up -d --build backend
             docker compose up -d pg-backup
+
+      # ==========================================
+      # BƯỚC 3 (MỚI): LOG TRẠNG THÁI PRISMA MIGRATION
+      # ==========================================
+      - name: 3. Verify & Log Prisma Migration Status
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          timeout: 60s
+          command_timeout: 10m
+          script: |
+            cd ~/app
+            echo "========================================================"
+            echo " KIỂM TRA TRẠNG THÁI PRISMA MIGRATION TRÊN PRODUCTION"
+            echo "========================================================"
+            docker compose run --rm backend npx prisma migrate status || echo "::warning::Phát hiện cảnh báo migration hoặc schema drift. Vui lòng kiểm tra log chi tiết ở trên."

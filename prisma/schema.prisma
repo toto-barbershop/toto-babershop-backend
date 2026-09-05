@@ -234,6 +234,7 @@ model Lookbook {
   category     String?
   tags         String[]
   instagramUrl String?
+  order        Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

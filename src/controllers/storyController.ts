@@ -3,7 +3,10 @@ import { prisma } from '../config/db.js';
 
 export const getStorys = async (req: Request, res: Response) => {
   try {
-    const data = await prisma.story.findMany({ orderBy: { createdAt: 'desc' } });
+    const data = await prisma.story.findMany({
+      ...(req.query.status === 'published' ? { where: { status: 'published' } } : {}),
+      orderBy: { createdAt: 'desc' },
+    });
     res.json(data);
   } catch (error: any) {
     res.status(500).json({ error: 'Lỗi server' });

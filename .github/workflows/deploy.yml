@@ -245,3 +245,31 @@ jobs:
               bash ~/app/scripts/rollback.sh
               exit 1
             fi
+
+      # ==========================================
+      # BƯỚC 5: KIỂM TRA LUỒNG CMS LOOKBOOK THẬT
+      # ==========================================
+      - name: 5. Lookbook API Smoke Check & Auto-Rollback
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          timeout: 60s
+          command_timeout: 10m
+          script: |
+            cd ~/app
+            LOOKBOOK_RESPONSE=$(curl -fsS http://localhost:5000/api/lookbooks) || {
+              echo "::error::CRITICAL: Lookbook API không trả HTTP 200 sau deploy."
+              bash ~/app/scripts/rollback.sh
+              exit 1
+            }
+
+            if [ "$LOOKBOOK_RESPONSE" = "[]" ]; then
+              echo "::error::CRITICAL: Lookbook API trả mảng rỗng sau deploy."
+              bash ~/app/scripts/rollback.sh
+              exit 1
+            fi
+
+            echo "Lookbook API smoke check thành công."

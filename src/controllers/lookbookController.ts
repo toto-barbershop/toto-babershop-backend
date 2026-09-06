@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../config/db.js';
 import redis from '../config/redis.js';
+import { logger } from '../utils/logger.js';
 
 const LOOKBOOK_CACHE_KEY = 'cache:lookbooks:v2';
 
@@ -15,6 +16,7 @@ export const getLookbooks = async (req: Request, res: Response) => {
     await redis.set(LOOKBOOK_CACHE_KEY, JSON.stringify(data), 'EX', 3600);
     res.json(data);
   } catch (error: any) {
+    logger.error('Không thể tải Lookbook', error, { reqId: req.id, code: error?.code });
     res.status(500).json({ error: 'Lỗi server' });
   }
 };

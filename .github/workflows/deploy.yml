@@ -166,7 +166,12 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            # 3. Khởi chạy và build các service
+            # 3. Áp dụng migration một cách tường minh trước khi khởi chạy backend.
+            # Service backend-migrate là one-shot nên Docker Compose có thể giữ container
+            # đã hoàn tất từ lần deploy trước và không chạy migration mới.
+            docker compose run --rm backend npx prisma migrate deploy
+
+            # 4. Khởi chạy và build các service
             docker compose up -d --build backend
             docker compose up -d pg-backup
 

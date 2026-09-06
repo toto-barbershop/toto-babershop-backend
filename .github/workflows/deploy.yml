@@ -169,7 +169,9 @@ jobs:
             # 3. Áp dụng migration một cách tường minh trước khi khởi chạy backend.
             # Service backend-migrate là one-shot nên Docker Compose có thể giữ container
             # đã hoàn tất từ lần deploy trước và không chạy migration mới.
-            docker compose run --rm backend npx prisma migrate deploy
+            # Dùng đúng DATABASE_URL mà API runtime dùng; DIRECT_URL cấu hình sai có thể
+            # khiến migration thành công trên một database khác với database API phục vụ.
+            docker compose run --rm backend sh -c 'DIRECT_URL="$DATABASE_URL" npx prisma migrate deploy'
 
             # 4. Khởi chạy và build các service
             docker compose up -d --build backend
@@ -236,7 +238,7 @@ jobs:
             echo " KIỂM TRA TRẠNG THÁI PRISMA MIGRATION TRÊN PRODUCTION"
             echo "========================================================"
 
-            if docker compose run --rm backend npx prisma migrate status; then
+            if docker compose run --rm backend sh -c 'DIRECT_URL="$DATABASE_URL" npx prisma migrate status'; then
               echo "========================================================"
               echo " PRISMA MIGRATION HOÀN TẤT & DATABASE SCHEMA KHỚP 100%"
               echo "========================================================"
@@ -262,12 +264,14 @@ jobs:
             cd ~/app
             LOOKBOOK_RESPONSE=$(curl -fsS http://localhost:5000/api/lookbooks) || {
               echo "::error::CRITICAL: Lookbook API không trả HTTP 200 sau deploy."
+              docker compose logs --tail=100 backend | grep -E 'Không thể tải Lookbook|Lookbook|Prisma' || true
               bash ~/app/scripts/rollback.sh
               exit 1
             }
 
             if [ "$LOOKBOOK_RESPONSE" = "[]" ]; then
               echo "::error::CRITICAL: Lookbook API trả mảng rỗng sau deploy."
+              docker compose logs --tail=100 backend | grep -E 'Không thể tải Lookbook|Lookbook|Prisma' || true
               bash ~/app/scripts/rollback.sh
               exit 1
             fi

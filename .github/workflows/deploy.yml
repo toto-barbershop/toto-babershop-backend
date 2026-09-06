@@ -198,6 +198,14 @@ jobs:
             # Đợi 5s cho container khởi động hoàn toàn
             sleep 5
 
+            echo "Đang kiểm tra PostgreSQL đã sẵn sàng..."
+            docker compose exec -T db pg_isready -U postgres -d totodb || {
+              echo "::error::CRITICAL: PostgreSQL chưa sẵn sàng sau deploy."
+              docker compose logs --tail=100 db || true
+              bash ~/app/scripts/rollback.sh
+              exit 1
+            }
+
             # Thử gọi tối đa 5 lần (mỗi lần cách nhau 3s, tổng ~15-20s)
             HEALTH_OK=false
             for i in $(seq 1 5); do
@@ -262,16 +270,34 @@ jobs:
           command_timeout: 10m
           script: |
             cd ~/app
-            LOOKBOOK_RESPONSE=$(curl -fsS http://localhost:5000/api/lookbooks) || {
-              echo "::error::CRITICAL: Lookbook API không trả HTTP 200 sau deploy."
-              docker compose logs --tail=100 backend | grep -E 'Không thể tải Lookbook|Lookbook|Prisma' || true
+
+            # Chờ backend khởi động ổn định trước khi kiểm tra luồng CMS.
+            sleep 10
+
+            echo "=== PREFLIGHT: kiểm tra schema trên database runtime ==="
+            docker compose run --rm backend sh -c 'DIRECT_URL="$DATABASE_URL" npx prisma db pull --print > /tmp/runtime-schema.prisma && wc -l /tmp/runtime-schema.prisma && grep -q "model Lookbook" /tmp/runtime-schema.prisma && grep -q "order" /tmp/runtime-schema.prisma' || {
+              echo "::error::CRITICAL: Không đọc được schema Lookbook từ database runtime."
+              echo "=== Backend Logs ==="
+              docker compose logs --tail=100 backend || true
+              echo "=== Database Logs ==="
+              docker compose logs --tail=100 db || true
               bash ~/app/scripts/rollback.sh
               exit 1
             }
 
-            if [ "$LOOKBOOK_RESPONSE" = "[]" ]; then
+            LOOKBOOK_RESPONSE=$(curl -fsS http://localhost:5000/api/lookbooks) || {
+              echo "::error::CRITICAL: Lookbook API không trả HTTP 200 sau deploy."
+              echo "=== Backend Logs ==="
+              docker compose logs --tail=100 backend || true
+              echo "=== Database Logs ==="
+              docker compose logs --tail=100 db || true
+              bash ~/app/scripts/rollback.sh
+              exit 1
+            }
+
+            if [ -z "$LOOKBOOK_RESPONSE" ] || [ "$LOOKBOOK_RESPONSE" = "[]" ]; then
               echo "::error::CRITICAL: Lookbook API trả mảng rỗng sau deploy."
-              docker compose logs --tail=100 backend | grep -E 'Không thể tải Lookbook|Lookbook|Prisma' || true
+              docker compose logs --tail=100 backend || true
               bash ~/app/scripts/rollback.sh
               exit 1
             fi

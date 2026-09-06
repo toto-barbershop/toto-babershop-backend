@@ -38,9 +38,6 @@ services:
         condition: service_healthy
     command: sh -c "npx prisma generate && npx prisma migrate deploy"
     restart: "no"
-    volumes:
-      - .:/app
-      - /app/node_modules
 
   backend:
     build:
@@ -62,8 +59,6 @@ services:
     command: npm run start
     volumes:
       - uploads_data:/app/public/uploads
-      - .:/app
-      - /app/node_modules
 
   pg-backup:
     image: eeshugerman/postgres-backup-s3:15

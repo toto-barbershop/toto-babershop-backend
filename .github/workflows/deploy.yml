@@ -166,15 +166,20 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            # 3. Áp dụng migration một cách tường minh trước khi khởi chạy backend.
+            # 3. Build image mới trước để Prisma CLI/client và migration đều lấy từ
+            # đúng commit hiện tại.
+            docker compose build backend backend-migrate
+
+            # 4. Áp dụng migration một cách tường minh trước khi khởi chạy backend.
             # Service backend-migrate là one-shot nên Docker Compose có thể giữ container
             # đã hoàn tất từ lần deploy trước và không chạy migration mới.
             # Dùng đúng DATABASE_URL mà API runtime dùng; DIRECT_URL cấu hình sai có thể
             # khiến migration thành công trên một database khác với database API phục vụ.
             docker compose run --rm backend sh -c 'DIRECT_URL="$DATABASE_URL" npx prisma migrate deploy'
 
-            # 4. Khởi chạy và build các service
-            docker compose up -d --build backend
+            # 5. Recreate container để không dùng Prisma Client cũ từ
+            # anonymous /app/node_modules volume của lần deploy trước.
+            docker compose up -d --force-recreate backend
             docker compose up -d pg-backup
 
       # ==========================================

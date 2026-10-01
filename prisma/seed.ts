@@ -528,13 +528,24 @@ async function main() {
 
   console.log('🌱 Seeding lookbooks...');
   const lookbooks = [
-    { id: 'lb-1', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-1.png`, title: 'Pompadour cổ điển', category: 'Classic', tags: ['Classic'] },
-    { id: 'lb-2', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-2.png`, title: 'Textured crop & beard', category: 'Modern', tags: ['Modern'] },
-    { id: 'lb-3', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-3.png`, title: 'Skin fade sắc nét', category: 'Fade', tags: ['Fade'] },
-    { id: 'lb-4', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-4.png`, title: 'Side part thanh lịch', category: 'Classic', tags: ['Classic'] },
-    { id: 'lb-shop-1', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/ourshop-1.jpg`, title: 'Shop Interior 1', category: 'Shop', tags: ['Shop'] },
+    { id: 'lb-1', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-1.png`, title: 'Pompadour cổ điển', category: 'Classic', tags: ['Classic'], published: true, order: 1 },
+    { id: 'lb-2', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-2.png`, title: 'Textured crop & beard', category: 'Modern', tags: ['Modern'], published: true, order: 2 },
+    { id: 'lb-3', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-3.png`, title: 'Skin fade sắc nét', category: 'Fade', tags: ['Fade'], published: true, order: 3 },
+    { id: 'lb-4', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-4.png`, title: 'Side part thanh lịch', category: 'Classic', tags: ['Classic'], published: true, order: 4 },
+    { id: 'lb-shop-1', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/ourshop-1.jpg`, title: 'Shop Interior 1', category: 'Shop', tags: ['Shop'], published: true, order: 1 },
   ];
   await prisma.lookbook.createMany({ data: lookbooks, skipDuplicates: true });
+
+  console.log('🌱 Seeding team members...');
+  const teamMembers = [
+    { id: 'team-barber-toto', name: 'Barber ToTo', role: 'Head Barber & Founder', image: '/images/interior.png', description: 'Tư vấn kĩ lưỡng, cắt tỉ mỉ, form tóc bền đẹp chuẩn form.', specialty: 'Classic Pompadour, Skin Fade', order: 1, status: 'active' },
+    { id: 'team-barber-huy', name: 'Barber Huy', role: 'Senior Barber', image: '/images/service-shave.jpg', description: 'Chuyên mảng tẩy tóc, vuốt tạo kiểu khó và form textured cá tính.', specialty: 'Textured Crop, Mullet', order: 2, status: 'active' },
+    { id: 'team-barber-minh', name: 'Barber Minh', role: 'Stylist & Color Specialist', image: '/images/interior1.png', description: 'Chuyên uốn nhuộm, vào màu tự nhiên hay contrast, sấy tạo kiểu.', specialty: 'Uốn Texture, Nhuộm Khói', order: 3, status: 'active' },
+    { id: 'team-barber-tin', name: 'Barber Tín', role: 'Grooming & Treatment Specialist', image: '/images/ourshop-4.jpg', description: 'Chuyên phục hồi tóc yếu, gội thư giãn và hoàn thiện mẫu tóc.', specialty: 'Cạo Khăn Nóng, Phục Hồi', order: 4, status: 'active' },
+  ];
+  for (const member of teamMembers) {
+    await prisma.teamMember.upsert({ where: { id: member.id }, update: member, create: member });
+  }
 
   console.log('🌱 Seeding media...');
   const media = [

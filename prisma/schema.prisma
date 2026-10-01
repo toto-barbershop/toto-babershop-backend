@@ -9,14 +9,14 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  name      String
-  phone     String?
-  role      String   @default("CUSTOMER")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          Int                  @id @default(autoincrement())
+  email       String               @unique
+  password    String
+  name        String
+  phone       String?
+  role        String               @default("CUSTOMER")
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
   orders      Order[]
   addresses   Address[]
   resetTokens PasswordResetToken[]
@@ -36,8 +36,8 @@ model Address {
 }
 
 model Product {
-  id             Int      @id @default(autoincrement())
-  slug           String   @unique
+  id             Int              @id @default(autoincrement())
+  slug           String           @unique
   name           String
   excerpt        String?
   description    String?
@@ -46,63 +46,63 @@ model Product {
   collection     String?
   basePrice      Int
   compareAtPrice Int?
-  featured       Boolean  @default(false)
-  status         String   @default("active")
+  featured       Boolean          @default(false)
+  status         String           @default("active")
   tags           String[]
   rating         Float?
   reviewCount    Int?
   seoTitle       String?
   seoDescription String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
   variants       ProductVariant[]
   orderItems     OrderItem[]
 }
 
 model ProductVariant {
-  id             Int       @id @default(autoincrement())
+  id             Int         @id @default(autoincrement())
   productId      Int
-  product        Product   @relation(fields: [productId], references: [id])
+  product        Product     @relation(fields: [productId], references: [id])
   name           String?
-  size           String?   
-  color          String?   
+  size           String?
+  color          String?
   options        Json?
   price          Int
   compareAtPrice Int?
-  stock          Int       @default(0)
-  sku            String?   @unique
+  stock          Int         @default(0)
+  sku            String?     @unique
   orderItems     OrderItem[]
 
   @@index([stock])
 }
 
 model Order {
-  id             Int         @id @default(autoincrement())
-  orderCode      String?     @unique  // Mã đơn có cấu trúc, VD: TTB-260818-8A3F
-  userId         Int
-  user           User        @relation(fields: [userId], references: [id])
-  total          Int
-  discount       Int         @default(0)
-  promoCode      String?
-  status         String      @default("PENDING")
-  paymentStatus  String      @default("UNPAID")
-  paymentMethod  String      @default("COD")
-  transactionId  String?
-  payosOrderCode BigInt?     @unique
-  idempotencyKey String?     @unique
+  id               Int                  @id @default(autoincrement())
+  orderCode        String?              @unique // Mã đơn có cấu trúc, VD: TTB-260818-8A3F
+  userId           Int
+  user             User                 @relation(fields: [userId], references: [id])
+  total            Int
+  discount         Int                  @default(0)
+  promoCode        String?
+  status           String               @default("PENDING")
+  paymentStatus    String               @default("UNPAID")
+  paymentMethod    String               @default("COD")
+  transactionId    String?
+  payosOrderCode   BigInt?              @unique
+  idempotencyKey   String?              @unique
   // Snapshot thông tin nhận hàng tại thời điểm đặt
-  customerName   String?
-  customerPhone  String?
-  customerEmail  String?
-  shippingAddress String?
-  note           String?
-  cancelReason   String?     // Lý do hủy: khách chọn, admin ghi chú, hoặc system timeout
-  cancelledBy    String?     // 'customer' | 'admin' | 'system_timeout'
-  deliveryAttempts Int       @default(0)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  items          OrderItem[]
-  statusHistory  OrderStatusHistory[]
+  customerName     String?
+  customerPhone    String?
+  customerEmail    String?
+  shippingAddress  String?
+  note             String?
+  cancelReason     String? // Lý do hủy: khách chọn, admin ghi chú, hoặc system timeout
+  cancelledBy      String? // 'customer' | 'admin' | 'system_timeout'
+  deliveryAttempts Int                  @default(0)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  items            OrderItem[]
+  statusHistory    OrderStatusHistory[]
 
   @@index([createdAt])
   @@index([status])
@@ -113,14 +113,14 @@ model Order {
 }
 
 model OrderStatusHistory {
-  id         Int      @id @default(autoincrement())
-  orderId    Int
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  oldStatus  String
-  newStatus  String
-  changedBy  String   @default("admin")
-  note       String?
-  changedAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  oldStatus String
+  newStatus String
+  changedBy String   @default("admin")
+  note      String?
+  changedAt DateTime @default(now())
 }
 
 model BlockedPhone {
@@ -132,11 +132,11 @@ model BlockedPhone {
 }
 
 model OrderItem {
-  id        Int     @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   orderId   Int
-  order     Order   @relation(fields: [orderId], references: [id])
+  order     Order           @relation(fields: [orderId], references: [id])
   productId Int
-  product   Product @relation(fields: [productId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id])
   variantId Int?
   variant   ProductVariant? @relation(fields: [variantId], references: [id])
   quantity  Int
@@ -144,29 +144,29 @@ model OrderItem {
 }
 
 model PromoCode {
-  id            Int      @id @default(autoincrement())
-  code          String   @unique
-  discountType  String   // "PERCENT" | "FIXED"
+  id            Int       @id @default(autoincrement())
+  code          String    @unique
+  discountType  String // "PERCENT" | "FIXED"
   discountValue Int
-  minOrderValue Int      @default(0)
+  minOrderValue Int       @default(0)
   maxDiscount   Int?
-  usageLimit    Int?     // null means unlimited
-  usedCount     Int      @default(0)
-  isActive      Boolean  @default(true)
+  usageLimit    Int? // null means unlimited
+  usedCount     Int       @default(0)
+  isActive      Boolean   @default(true)
   expiresAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model PasswordResetToken {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  user       User     @relation(fields: [userId], references: [id])
-  tokenHash  String
-  expiresAt  DateTime
-  used       Boolean  @default(false)
-  attempts   Int      @default(0)
-  createdAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  tokenHash String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
 }
 
 model Category {
@@ -213,18 +213,18 @@ model Course {
 }
 
 model Story {
-  id          String   @id @default(uuid())
-  title       String
-  slug        String   @unique
-  subtitle    String?
-  manifesto   String?
-  heroImage   String?
-  blocks      Json?
-  gallery     Json?
-  status      String   @default("draft")
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  title     String
+  slug      String   @unique
+  subtitle  String?
+  manifesto String?
+  heroImage String?
+  blocks    Json?
+  gallery   Json?
+  status    String   @default("draft")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Lookbook {
@@ -234,8 +234,23 @@ model Lookbook {
   category     String?
   tags         String[]
   instagramUrl String?
+  published    Boolean  @default(true)
+  order        Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model TeamMember {
+  id          String   @id @default(uuid())
+  name        String
+  role        String
+  image       String
+  description String?
+  specialty   String?
+  status      String   @default("active")
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Media {

@@ -7,7 +7,7 @@ export const getLookbooks = async (req: Request, res: Response) => {
     const cached = await redis.get('cache:lookbooks');
     if (cached) return res.json(JSON.parse(cached));
 
-    const data = await prisma.lookbook.findMany({ orderBy: { createdAt: 'desc' } });
+    const data = await prisma.lookbook.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'desc' }] });
     await redis.set('cache:lookbooks', JSON.stringify(data), 'EX', 3600);
     res.json(data);
   } catch (error: any) {
@@ -27,7 +27,7 @@ export const getLookbook = async (req: Request, res: Response) => {
 
 export const createLookbook = async (req: Request, res: Response) => {
   try {
-    const data = await prisma.lookbook.create({ data: req.body });
+    const data = await prisma.lookbook.create({ data: normalizeLookbookPayload(req.body) as any });
     await redis.del('cache:lookbooks');
     res.status(201).json(data);
   } catch (error: any) {
@@ -37,13 +37,30 @@ export const createLookbook = async (req: Request, res: Response) => {
 
 export const updateLookbook = async (req: Request, res: Response) => {
   try {
-    const data = await prisma.lookbook.update({ where: { id: String(req.params.id) }, data: req.body });
+    const data = await prisma.lookbook.update({
+      where: { id: String(req.params.id) },
+      data: normalizeLookbookPayload(req.body, true),
+    });
     await redis.del('cache:lookbooks');
     res.json(data);
   } catch (error: any) {
     res.status(400).json({ error: 'Lỗi cập nhật' });
   }
 };
+
+function normalizeLookbookPayload(body: any, partial = false) {
+  const payload: Record<string, unknown> = {};
+
+  if (!partial || body.image !== undefined) payload.image = String(body.image || '').trim();
+  if (!partial || body.title !== undefined) payload.title = body.title ? String(body.title).trim() : null;
+  if (!partial || body.category !== undefined) payload.category = body.category ? String(body.category).trim() : null;
+  if (!partial || body.tags !== undefined) payload.tags = Array.isArray(body.tags) ? body.tags.map((tag: unknown) => String(tag).trim()).filter(Boolean) : [];
+  if (!partial || body.instagramUrl !== undefined) payload.instagramUrl = body.instagramUrl ? String(body.instagramUrl).trim() : null;
+  if (!partial || body.published !== undefined) payload.published = body.published !== false && body.published !== 'false';
+  if (!partial || body.order !== undefined) payload.order = Math.max(0, Number.parseInt(String(body.order ?? 0), 10) || 0);
+
+  return payload;
+}
 
 export const deleteLookbook = async (req: Request, res: Response) => {
   try {

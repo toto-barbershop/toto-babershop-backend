@@ -534,9 +534,7 @@ async function main() {
     { id: 'lb-4', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-4.png`, title: 'Side part thanh lịch', category: 'Classic', tags: ['Classic'], published: true, order: 4 },
     { id: 'lb-shop-1', image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/ourshop-1.jpg`, title: 'Shop Interior 1', category: 'Shop', tags: ['Shop'], published: true, order: 1 },
   ];
-  for (const lb of lookbooks) {
-    await prisma.lookbook.upsert({ where: { id: lb.id }, update: lb, create: lb });
-  }
+  await prisma.lookbook.createMany({ data: lookbooks, skipDuplicates: true });
 
   console.log('🌱 Seeding team members...');
   const teamMembers = [

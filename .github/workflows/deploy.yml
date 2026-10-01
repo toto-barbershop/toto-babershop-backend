@@ -166,8 +166,20 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            # 3. Khởi chạy và build các service
-            docker compose up -d --build backend
+            # 3. Build image mới trước để Prisma CLI/client và migration đều lấy từ
+            # đúng commit hiện tại.
+            docker compose build backend backend-migrate
+
+            # 4. Áp dụng migration một cách tường minh trước khi khởi chạy backend.
+            # Service backend-migrate là one-shot nên Docker Compose có thể giữ container
+            # đã hoàn tất từ lần deploy trước và không chạy migration mới.
+            # Dùng đúng DATABASE_URL mà API runtime dùng; DIRECT_URL cấu hình sai có thể
+            # khiến migration thành công trên một database khác với database API phục vụ.
+            docker compose run --rm backend sh -c 'DIRECT_URL="$DATABASE_URL" npx prisma migrate deploy'
+
+            # 5. Recreate container để không dùng Prisma Client cũ từ
+            # anonymous /app/node_modules volume của lần deploy trước.
+            docker compose up -d --force-recreate backend
             docker compose up -d pg-backup
 
       # ==========================================
@@ -190,6 +202,14 @@ jobs:
 
             # Đợi 5s cho container khởi động hoàn toàn
             sleep 5
+
+            echo "Đang kiểm tra PostgreSQL đã sẵn sàng..."
+            docker compose exec -T db pg_isready -U postgres -d totodb || {
+              echo "::error::CRITICAL: PostgreSQL chưa sẵn sàng sau deploy."
+              docker compose logs --tail=100 db || true
+              bash ~/app/scripts/rollback.sh
+              exit 1
+            }
 
             # Thử gọi tối đa 5 lần (mỗi lần cách nhau 3s, tổng ~15-20s)
             HEALTH_OK=false
@@ -231,7 +251,7 @@ jobs:
             echo " KIỂM TRA TRẠNG THÁI PRISMA MIGRATION TRÊN PRODUCTION"
             echo "========================================================"
 
-            if docker compose run --rm backend npx prisma migrate status; then
+            if docker compose run --rm backend sh -c 'DIRECT_URL="$DATABASE_URL" npx prisma migrate status'; then
               echo "========================================================"
               echo " PRISMA MIGRATION HOÀN TẤT & DATABASE SCHEMA KHỚP 100%"
               echo "========================================================"
@@ -240,3 +260,51 @@ jobs:
               bash ~/app/scripts/rollback.sh
               exit 1
             fi
+
+      # ==========================================
+      # BƯỚC 5: KIỂM TRA LUỒNG CMS LOOKBOOK THẬT
+      # ==========================================
+      - name: 5. Lookbook API Smoke Check & Auto-Rollback
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          timeout: 60s
+          command_timeout: 10m
+          script: |
+            cd ~/app
+
+            # Chờ backend khởi động ổn định trước khi kiểm tra luồng CMS.
+            sleep 10
+
+            echo "=== PREFLIGHT: kiểm tra schema trên database runtime ==="
+            docker compose run --rm backend sh -c 'DIRECT_URL="$DATABASE_URL" npx prisma db pull --print > /tmp/runtime-schema.prisma && wc -l /tmp/runtime-schema.prisma && grep -q "model Lookbook" /tmp/runtime-schema.prisma && grep -q "order" /tmp/runtime-schema.prisma' || {
+              echo "::error::CRITICAL: Không đọc được schema Lookbook từ database runtime."
+              echo "=== Backend Logs ==="
+              docker compose logs --tail=100 backend || true
+              echo "=== Database Logs ==="
+              docker compose logs --tail=100 db || true
+              bash ~/app/scripts/rollback.sh
+              exit 1
+            }
+
+            LOOKBOOK_RESPONSE=$(curl -fsS http://localhost:5000/api/lookbooks) || {
+              echo "::error::CRITICAL: Lookbook API không trả HTTP 200 sau deploy."
+              echo "=== Backend Logs ==="
+              docker compose logs --tail=100 backend || true
+              echo "=== Database Logs ==="
+              docker compose logs --tail=100 db || true
+              bash ~/app/scripts/rollback.sh
+              exit 1
+            }
+
+            if [ -z "$LOOKBOOK_RESPONSE" ] || [ "$LOOKBOOK_RESPONSE" = "[]" ]; then
+              echo "::error::CRITICAL: Lookbook API trả mảng rỗng sau deploy."
+              docker compose logs --tail=100 backend || true
+              bash ~/app/scripts/rollback.sh
+              exit 1
+            fi
+
+            echo "Lookbook API smoke check thành công."

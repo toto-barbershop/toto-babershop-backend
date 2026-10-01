@@ -281,12 +281,10 @@ async function main() {
 
   console.log('\n🌱 Seeding services...');
   const services = [
-    { slug: 'classic-haircut', name: 'Classic Haircut', category: 'Cắt tóc', price: 150000, duration: 45, description: 'Cắt tóc cổ điển theo khuôn mặt, gội và tạo kiểu hoàn thiện.', process: ['Tư vấn kiểu tóc', 'Cắt & tỉa', 'Gội massage', 'Tạo kiểu'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/barber-1.png`, featured: true, order: 1, status: 'active' },
-    { slug: 'skin-fade', name: 'Skin Fade', category: 'Cắt tóc', price: 200000, duration: 60, description: 'Fade da đầu chuẩn từng lớp, đường nét sắc sảo, hiện đại.', process: ['Tư vấn độ fade', 'Tông đơ tạo lớp', 'Line-up', 'Tạo kiểu'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-3.png`, featured: true, order: 2, status: 'active' },
-    { slug: 'beard-shaping', name: 'Beard Shaping & Hot Towel', category: 'Cạo râu', price: 120000, duration: 30, description: 'Tạo dáng râu, cạo dao cạo truyền thống kèm khăn nóng thư giãn.', process: ['Khăn nóng', 'Tạo dáng râu', 'Cạo dao', 'Dưỡng da'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-5.png`, featured: true, order: 3, status: 'active' },
-    { slug: 'the-full-service', name: 'The Full Service', category: 'Combo', price: 300000, duration: 90, description: 'Combo trọn gói: cắt tóc, fade, cạo râu và tạo kiểu cao cấp.', process: ['Tư vấn tổng thể', 'Cắt & fade', 'Cạo râu hot towel', 'Gội & tạo kiểu'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/hero.png`, featured: true, order: 4, status: 'active' },
-    { slug: 'kids-cut', name: 'Kids Cut', category: 'Cắt tóc', price: 100000, duration: 30, description: 'Cắt tóc cho bé nhẹ nhàng, thân thiện, tạo kiểu dễ thương.', process: ['Trò chuyện với bé', 'Cắt & tỉa', 'Tạo kiểu'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/barber-2.png`, featured: false, order: 5, status: 'active' },
-    { slug: 'hair-color', name: 'Hair Color', category: 'Nhuộm', price: 450000, duration: 120, description: 'Nhuộm màu thời trang hoặc phủ bạc, chăm sóc màu bền đẹp.', process: ['Tư vấn màu', 'Tẩy/nhuộm', 'Dưỡng màu', 'Tạo kiểu'], image: `${process.env.R2_PUBLIC_URL || 'https://pub-6729e43af67d4a3f94fe9289bd80ea69.r2.dev'}/lookbook-4.png`, featured: false, order: 6, status: 'active' },
+    { slug: 'cat-toc-tao-kieu', name: 'CẮT TÓC & TẠO KIỂU', category: 'Cắt tóc & tạo kiểu', price: 150000, duration: 45, durationLabel: '~45 phút', description: 'Cắt gọt và định hình form tóc chuẩn nam tính.', process: ['Tư vấn dáng tóc', 'Xả sạch & Cắt gọt', 'Sấy tạo kiểu & Hướng dẫn vuốt sáp'], image: '/images/service-cut.jpg', featured: false, order: 1, status: 'active' },
+    { slug: 'cham-soc-tia-rau', name: 'CHĂM SÓC & TỈA RÂU', category: 'Chăm sóc & tỉa râu', price: 120000, duration: 30, durationLabel: '~30 phút', description: 'Tỉa form râu và cạo sát êm ái cho gương mặt chỉn chu.', process: ['Định hình khuôn râu', 'Ủ khăn nóng & Cạo êm ái', 'Thoa dưỡng da mặt'], image: '/images/service-shave.jpg', featured: false, order: 2, status: 'active' },
+    { slug: 'uon-nhuom-tao-form', name: 'UỐN & NHUỘM TẠO FORM', category: 'Uốn & nhuộm tạo form', price: 350000, duration: 90, durationLabel: '~90 - 120 phút', description: 'Hóa chất tạo nếp và đổi màu bảo vệ chất tóc.', process: ['Kiểm tra chất tóc', 'Uốn/Nhuộm tạo phom natural', 'Xả dưỡng & Khóa form'], image: '/images/combo.jpg', featured: true, order: 3, status: 'active' },
+    { slug: 'phuc-hoi-goi-thu-gian', name: 'PHỤC HỒI & GỘI THƯ GIÃN', category: 'Phục hồi & gội thư giãn', price: 180000, duration: 30, durationLabel: '~30 - 45 phút', description: 'Làm sạch sâu da đầu và giải tỏa căng thẳng.', process: ['Tẩy tế bào chết da đầu', 'Gội ấn huyệt cổ-vai-gáy', 'Xả dưỡng & Sấy khô'], image: '/images/ourshop-2.jpg', featured: true, order: 4, status: 'active' },
   ];
 
   for (const s of services) {
@@ -297,6 +295,10 @@ async function main() {
     });
     console.log(`  ✅ Service: ${s.name}`);
   }
+  await prisma.service.updateMany({
+    where: { slug: { in: ['classic-haircut', 'skin-fade', 'beard-shaping', 'the-full-service', 'kids-cut', 'hair-color'] } },
+    data: { status: 'hidden' },
+  });
 
   console.log('\n🌱 Seeding products...');
   

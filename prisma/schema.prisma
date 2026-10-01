@@ -181,20 +181,21 @@ model Category {
 }
 
 model Service {
-  id          Int      @id @default(autoincrement())
-  slug        String   @unique
-  name        String
-  category    String
-  price       Int
-  duration    Int
-  description String?
-  process     String[]
-  image       String?
-  featured    Boolean  @default(false)
-  order       Int      @default(0)
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  slug          String   @unique
+  name          String
+  category      String
+  price         Int
+  duration      Int
+  durationLabel String?
+  description   String?
+  process       String[]
+  image         String?
+  featured      Boolean  @default(false)
+  order         Int      @default(0)
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Course {

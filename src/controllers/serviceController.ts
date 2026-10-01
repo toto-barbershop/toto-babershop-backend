@@ -22,7 +22,7 @@ export const getServices = async (req: Request, res: Response) => {
 
 export const createService = async (req: Request, res: Response) => {
   try {
-    const { name, slug, category, price, duration, description, process, image, featured, order, status } = req.body;
+    const { name, slug, category, price, duration, durationLabel, description, process, image, featured, order, status } = req.body;
     
     const srvSlug = slug || (name ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') : `service-${Date.now()}`);
 
@@ -33,6 +33,7 @@ export const createService = async (req: Request, res: Response) => {
         category: category || 'General',
         price: price ? parseInt(price) : 0,
         duration: duration ? parseInt(duration) : 30,
+        durationLabel: durationLabel ? String(durationLabel).trim() : null,
         description,
         process: process || [],
         image,
@@ -52,7 +53,7 @@ export const createService = async (req: Request, res: Response) => {
 export const updateService = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, slug, category, price, duration, description, process, image, featured, order, status } = req.body;
+    const { name, slug, category, price, duration, durationLabel, description, process, image, featured, order, status } = req.body;
     
     const service = await prisma.service.update({
       where: { id: parseInt(id as string) },
@@ -62,6 +63,7 @@ export const updateService = async (req: Request, res: Response) => {
         ...(category && { category }),
         ...(typeof price !== 'undefined' && { price: parseInt(price) }),
         ...(typeof duration !== 'undefined' && { duration: parseInt(duration) }),
+        ...(durationLabel !== undefined && { durationLabel: durationLabel ? String(durationLabel).trim() : null }),
         ...(description !== undefined && { description }),
         ...(process !== undefined && { process }),
         ...(image !== undefined && { image }),
